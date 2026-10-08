@@ -1,6 +1,6 @@
 import app from './app.js';
 import { connectDB } from './config/db.js';
-import { ENV } from './config/env.js';
+import { seedAssessmentQuestions } from './config/seedQuestions.js';
 
 const startServer = async () => {
   // Start HTTP Server immediately
@@ -9,8 +9,10 @@ const startServer = async () => {
     console.log(`[PrepVerse Server] Health check: http://localhost:${ENV.PORT}/api/v1/health`);
   });
 
-  // Connect to Database asynchronously
-  connectDB();
+  // Connect to Database asynchronously and seed diagnostic questions
+  connectDB().then(() => {
+    seedAssessmentQuestions();
+  });
 
   // Handle unhandled promise rejections gracefully
   process.on('unhandledRejection', (err) => {

@@ -9,9 +9,14 @@ export const AppLayout = () => {
   const { user, isAuthenticated, logout } = useAuth();
 
   const navItems = [
-    { label: 'System Overview', path: '/' },
-    { label: 'Assess (Phase 3)', path: '/assess', disabled: true },
-    { label: 'Plan (Phase 4)', path: '/plan', disabled: true },
+    { label: 'Overview', path: '/' },
+    ...(isAuthenticated
+      ? [
+          { label: 'Dashboard', path: '/dashboard' },
+          { label: 'Assessment', path: '/assessment' },
+          { label: 'Onboarding', path: '/onboarding' },
+        ]
+      : []),
     { label: 'Rooms (Phase 6)', path: '/rooms', disabled: true },
   ];
 

@@ -194,6 +194,8 @@ export const getMe = async (req, res) => {
       avatar: req.user.avatar,
       role: req.user.role,
       provider: req.user.provider,
+      hasCompletedOnboarding: req.user.hasCompletedOnboarding || false,
+      hasCompletedAssessment: req.user.hasCompletedAssessment || false,
       createdAt: req.user.createdAt,
     },
   });

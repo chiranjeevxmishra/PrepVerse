@@ -43,6 +43,14 @@ const userSchema = new mongoose.Schema(
       enum: ['student', 'admin'],
       default: 'student',
     },
+    hasCompletedOnboarding: {
+      type: Boolean,
+      default: false,
+    },
+    hasCompletedAssessment: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

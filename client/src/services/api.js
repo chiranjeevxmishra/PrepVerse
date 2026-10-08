@@ -69,4 +69,31 @@ export const logoutUser = async () => {
   return response.data;
 };
 
+// Student Profile & Onboarding Services
+export const getMyProfile = async () => {
+  const response = await api.get('/profile/me');
+  return response.data;
+};
+
+export const saveOnboarding = async (onboardingData) => {
+  const response = await api.post('/profile/onboarding', onboardingData);
+  return response.data;
+};
+
+// Assessment Services
+export const getAssessmentQuestions = async () => {
+  const response = await api.get('/assessment/questions');
+  return response.data;
+};
+
+export const submitAssessment = async (answers) => {
+  const response = await api.post('/assessment/submit', { answers });
+  return response.data;
+};
+
+export const getAssessmentResults = async () => {
+  const response = await api.get('/assessment/results');
+  return response.data;
+};
+
 export default api;

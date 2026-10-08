@@ -50,7 +50,15 @@ export const LoginPage = () => {
     setIsSubmitting(false);
 
     if (result.success) {
-      navigate(from, { replace: true });
+      if (location.state?.from?.pathname && location.state.from.pathname !== '/') {
+        navigate(location.state.from.pathname, { replace: true });
+      } else if (!result.user?.hasCompletedOnboarding) {
+        navigate('/onboarding', { replace: true });
+      } else if (!result.user?.hasCompletedAssessment) {
+        navigate('/assessment', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     }
   };
 
@@ -67,7 +75,15 @@ export const LoginPage = () => {
     setIsSubmitting(false);
 
     if (result.success) {
-      navigate(from, { replace: true });
+      if (location.state?.from?.pathname && location.state.from.pathname !== '/') {
+        navigate(location.state.from.pathname, { replace: true });
+      } else if (!result.user?.hasCompletedOnboarding) {
+        navigate('/onboarding', { replace: true });
+      } else if (!result.user?.hasCompletedAssessment) {
+        navigate('/assessment', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     }
   };
 

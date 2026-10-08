@@ -44,6 +44,8 @@ export const sendTokenResponse = (user, statusCode, res, message = 'Authenticate
       avatar: user.avatar,
       role: user.role,
       provider: user.provider,
+      hasCompletedOnboarding: user.hasCompletedOnboarding || false,
+      hasCompletedAssessment: user.hasCompletedAssessment || false,
       createdAt: user.createdAt,
     },
   });
