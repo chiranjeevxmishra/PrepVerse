@@ -7,10 +7,15 @@ import { startInterviewReminderScheduler } from './services/notificationService.
 
 const startServer = async () => {
   // Start HTTP Server immediately
-  const server = app.listen(ENV.PORT, () => {
-    console.log(`[PrepVerse Server] Running in ${ENV.NODE_ENV} mode on port ${ENV.PORT}`);
-    console.log(`[PrepVerse Server] Health check: http://localhost:${ENV.PORT}/api/v1/health`);
+  const server = app.listen(ENV.PORT, '0.0.0.0', () => {
+    console.log(
+      `[PrepVerse Server] Running in ${ENV.NODE_ENV} mode on port ${ENV.PORT}`
+    );
+    console.log(
+      `[PrepVerse Server] Health check: http://localhost:${ENV.PORT}/api/v1/health`
+    );
   });
+
   attachSocketServer(server);
 
   // Connect to Database asynchronously and seed diagnostic questions
