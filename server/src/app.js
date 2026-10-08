@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import { ENV } from './config/env.js';
 import v1Routes from './routes/v1/index.js';
 import { notFound } from './middleware/notFound.js';
@@ -29,9 +30,10 @@ if (ENV.NODE_ENV === 'development') {
   app.use(morgan('combined'));
 }
 
-// Body Parser
+// Body & Cookie Parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Root sanity endpoint
 app.get('/', (req, res) => {

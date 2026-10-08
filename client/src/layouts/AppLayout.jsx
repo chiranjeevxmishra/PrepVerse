@@ -1,9 +1,12 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Terminal, Shield, Cpu, Activity } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Terminal, Shield, Cpu, Activity, LogIn, LogOut, User as UserIcon } from 'lucide-react';
+import Button from '../components/ui/Button';
 
 export const AppLayout = () => {
   const location = useLocation();
+  const { user, isAuthenticated, logout } = useAuth();
 
   const navItems = [
     { label: 'System Overview', path: '/' },
@@ -60,11 +63,50 @@ export const AppLayout = () => {
             })}
           </nav>
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] text-slate-400 font-mono">
-              <span className="h-2 w-2 rounded-full bg-brand-500 animate-pulse"></span>
-              <span>v1.0 (Phase 0)</span>
-            </div>
+          <div className="flex items-center gap-3">
+            {isAuthenticated && user ? (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 pl-2 pr-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+                  {user.avatar ? (
+                    <img
+                      src={user.avatar}
+                      alt={user.name}
+                      className="h-6 w-6 rounded-full bg-slate-800 object-cover"
+                    />
+                  ) : (
+                    <div className="h-6 w-6 rounded-full bg-brand-500/20 text-brand-500 flex items-center justify-center text-xs font-semibold">
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="text-left hidden sm:block">
+                    <p className="text-xs font-medium text-slate-200 leading-none">
+                      {user.name}
+                    </p>
+                    <span className="text-[10px] text-brand-500 font-mono uppercase">
+                      {user.role}
+                    </span>
+                  </div>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={logout}
+                  className="text-slate-400 hover:text-rose-400 gap-1.5"
+                  title="Sign Out"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                </Button>
+              </div>
+            ) : (
+              <Link to="/login">
+                <Button variant="primary" size="sm" className="gap-1.5">
+                  <LogIn className="h-3.5 w-3.5" />
+                  <span>Sign In</span>
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -80,13 +122,13 @@ export const AppLayout = () => {
           <p>© {new Date().getFullYear()} PrepVerse — Personal Placement Operating System</p>
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1">
-              <Shield className="h-3 w-3 text-brand-500" /> Secure Architecture
+              <Shield className="h-3 w-3 text-brand-500" /> Secure JWT/Cookie Auth
             </span>
             <span className="inline-flex items-center gap-1">
-              <Cpu className="h-3 w-3 text-sky-400" /> Modular Micro-Slices
+              <Cpu className="h-3 w-3 text-sky-400" /> Google OAuth Ready
             </span>
             <span className="inline-flex items-center gap-1">
-              <Activity className="h-3 w-3 text-emerald-400" /> Live Diagnostics
+              <Activity className="h-3 w-3 text-emerald-400" /> Protected API Routes
             </span>
           </div>
         </div>

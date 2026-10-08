@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema(
   {
@@ -19,13 +20,18 @@ const userSchema = new mongoose.Schema(
         'Please provide a valid email address',
       ],
     },
-    passwordHash: {
+    password: {
       type: String,
-      select: false, // Never return by default in queries
+      minlength: [6, 'Password must be at least 6 characters'],
+      select: false, // Never returned in default queries
     },
-    authProvider: {
+    avatar: {
       type: String,
-      enum: ['local', 'google', 'github'],
+      default: null,
+    },
+    provider: {
+      type: String,
+      enum: ['local', 'google'],
       default: 'local',
     },
     providerId: {
@@ -43,4 +49,21 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+// Hash password before saving
+userSchema.pre('save', async function (next) {
+  if (!this.isModified('password') || !this.password) {
+    return next();
+  }
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+// Match user-entered password to hashed password in database
+userSchema.methods.matchPassword = async function (enteredPassword) {
+  if (!this.password) return false;
+  return await bcrypt.compare(enteredPassword, this.password);
+};
+
 export const User = mongoose.model('User', userSchema);
+export default User;
