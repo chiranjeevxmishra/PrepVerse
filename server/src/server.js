@@ -1,6 +1,7 @@
 import app from './app.js';
 import { connectDB } from './config/db.js';
 import { seedAssessmentQuestions } from './config/seedQuestions.js';
+import { ENV } from './config/env.js';
 
 const startServer = async () => {
   // Start HTTP Server immediately

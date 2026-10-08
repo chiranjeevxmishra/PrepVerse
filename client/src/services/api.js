@@ -96,4 +96,20 @@ export const getAssessmentResults = async () => {
   return response.data;
 };
 
+// Preparation Plan Services
+export const getTodaysPlan = async () => {
+  const response = await api.get('/plan/today');
+  return response.data;
+};
+
+export const completeTask = async (taskId) => {
+  const response = await api.patch(`/plan/tasks/${taskId}/complete`);
+  return response.data;
+};
+
+export const getPlanHistory = async () => {
+  const response = await api.get('/plan/history');
+  return response.data;
+};
+
 export default api;

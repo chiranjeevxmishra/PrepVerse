@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { getMyProfile } from '../services/api';
+import { getMyProfile, getTodaysPlan, completeTask, getPlanHistory } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
   Award,
   TrendingUp,
   AlertTriangle,
-  CheckCircle,
+  CheckCircle2,
+  Circle,
   ArrowRight,
   RefreshCw,
   Target,
@@ -16,55 +17,134 @@ import {
   BookOpen,
   Calendar,
   Layers,
+  Clock,
+  Check,
   ChevronRight,
-  ShieldAlert,
+  HelpCircle,
+  History,
+  Zap,
 } from 'lucide-react';
 
 export const DashboardPage = () => {
   const [profile, setProfile] = useState(null);
+  const [planData, setPlanData] = useState(null);
+  const [historyTasks, setHistoryTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [completingTaskId, setCompletingTaskId] = useState(null);
+  const [recentNotification, setRecentNotification] = useState(null);
   const [error, setError] = useState(null);
 
   const { user } = useAuth();
 
-  const fetchProfile = async () => {
+  const loadDashboardData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getMyProfile();
-      if (data.success) {
-        setProfile(data.profile);
+      const [profileRes, planRes, historyRes] = await Promise.all([
+        getMyProfile(),
+        getTodaysPlan().catch((err) => {
+          setError(err.message || 'Could not load today’s preparation plan.');
+          return null;
+        }),
+        getPlanHistory().catch(() => null),
+      ]);
+
+      if (profileRes.success) {
+        setProfile(profileRes.profile);
+      }
+      if (planRes && planRes.success) {
+        setPlanData(planRes);
+      }
+      if (historyRes && historyRes.success) {
+        setHistoryTasks(historyRes.tasks || []);
       }
     } catch (err) {
-      setError(err.message || 'Failed to load profile');
+      setError(err.message || 'Failed to load placement dashboard data');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchProfile();
+    loadDashboardData();
   }, []);
+
+  const handleCompleteTask = async (taskId) => {
+    setCompletingTaskId(taskId);
+    setRecentNotification(null);
+    try {
+      const data = await completeTask(taskId);
+      if (data.success) {
+        // Update local tasks state
+        setPlanData((prev) => {
+          if (!prev) return prev;
+          const updatedTasks = prev.tasks.map((t) =>
+            t._id === taskId ? { ...t, status: 'completed', completedAt: new Date() } : t
+          );
+          const completedCount = updatedTasks.filter((t) => t.status === 'completed').length;
+          return {
+            ...prev,
+            tasks: updatedTasks,
+            stats: {
+              ...prev.stats,
+              completedTasks: completedCount,
+              percentComplete: Math.round((completedCount / updatedTasks.length) * 100),
+            },
+          };
+        });
+
+        // Update persisted task count; completing practice does not change assessment scores.
+        if (data.profile) {
+          setProfile(data.profile);
+        }
+
+        setRecentNotification({
+          message: 'Task completed and saved to your practice history.',
+        });
+
+        // Refresh completed history
+        const updatedHistory = await getPlanHistory().catch(() => null);
+        if (updatedHistory?.success) {
+          setHistoryTasks(updatedHistory.tasks || []);
+        }
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to complete task');
+    } finally {
+      setCompletingTaskId(null);
+    }
+  };
 
   if (loading) {
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-3">
         <div className="h-8 w-8 rounded-full border-2 border-brand-500 border-t-transparent animate-spin"></div>
-        <p className="text-xs text-slate-400 font-mono">Loading placement dashboard...</p>
+        <p className="text-xs text-slate-400 font-mono">Synthesizing personal preparation plan...</p>
       </div>
     );
   }
 
   const hasScore = profile && profile.readinessScore !== null && profile.readinessScore !== undefined;
 
-  // Tier calculation
+  // Category Color Map
+  const getCategoryStyles = (cat) => {
+    const c = (cat || '').toUpperCase();
+    if (c === 'DSA') return 'bg-sky-500/10 text-sky-400 border-sky-500/30';
+    if (c === 'DBMS') return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+    if (c === 'OS') return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+    if (c === 'NETWORKING') return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+    if (c === 'OOP') return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30';
+    return 'bg-slate-800 text-slate-300 border-slate-700';
+  };
+
+  // Score Tier details
   const getScoreTier = (score) => {
     if (score >= 80) {
       return {
         label: 'Placement Ready',
         color: 'text-brand-400',
         bg: 'bg-brand-500/10 border-brand-500/30',
-        desc: 'Strong baseline. Focus on system design, behavioral storytelling, and high-frequency company tags.',
+        desc: 'High baseline. Focus on system design and top company tagged questions.',
       };
     }
     if (score >= 60) {
@@ -72,14 +152,14 @@ export const DashboardPage = () => {
         label: 'Developing Readiness',
         color: 'text-amber-400',
         bg: 'bg-amber-500/10 border-amber-500/30',
-        desc: 'Good fundamentals. Targeted practice in identified weak areas will push you into top placement tiers.',
+        desc: 'Solid core knowledge. Targeted practice in identified gaps will push you into top placement tiers.',
       };
     }
     return {
       label: 'Foundation Phase',
       color: 'text-sky-400',
       bg: 'bg-sky-500/10 border-sky-500/30',
-      desc: 'Build consistency in core CS fundamentals and standard DSA problem-solving patterns.',
+      desc: 'Focus on core CS theory and consistent standard DSA problem-solving patterns.',
     };
   };
 
@@ -87,12 +167,12 @@ export const DashboardPage = () => {
 
   return (
     <div className="space-y-8 animate-fadeIn max-w-7xl mx-auto">
-      {/* Top Banner */}
+      {/* Top Welcome Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800/80">
         <div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/20 text-[11px] font-mono text-brand-400 mb-2">
             <Sparkles className="h-3 w-3" />
-            <span>Placement Intelligence Dashboard</span>
+            <span>Placement Intelligence Operating System</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             Welcome back, {user?.name || 'Student'}
@@ -110,17 +190,17 @@ export const DashboardPage = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchProfile}
+            onClick={loadDashboardData}
             title="Refresh Data"
             className="gap-1.5 text-xs"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            <span>Refresh</span>
+            <span>Sync</span>
           </Button>
           <Link to="/assessment">
             <Button variant="secondary" size="sm" className="gap-1.5 text-xs">
               <BookOpen className="h-3.5 w-3.5" />
-              <span>{hasScore ? 'Retake Assessment' : 'Take Assessment'}</span>
+              <span>{hasScore ? 'Retake Test' : 'Diagnostic Test'}</span>
             </Button>
           </Link>
         </div>
@@ -132,7 +212,25 @@ export const DashboardPage = () => {
         </div>
       )}
 
-      {/* If No Assessment Completed Yet Callout */}
+      {/* Completion Toast Notification */}
+      {recentNotification && (
+        <div className="p-4 rounded-xl bg-brand-500/15 border border-brand-500/40 text-brand-300 text-xs flex items-center justify-between animate-fadeIn shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <div className="h-7 w-7 rounded-full bg-brand-500 text-slate-950 flex items-center justify-center font-bold">
+              <Zap className="h-4 w-4" />
+            </div>
+            <span className="font-medium text-slate-100">{recentNotification.message}</span>
+          </div>
+          <button
+            onClick={() => setRecentNotification(null)}
+            className="text-slate-400 hover:text-white text-xs px-2 py-1"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* If No Assessment Done Callout */}
       {!hasScore && (
         <Card className="border-brand-500/30 bg-brand-500/5 backdrop-blur-md p-6 text-center space-y-4">
           <div className="h-12 w-12 rounded-full bg-brand-500/10 text-brand-500 border border-brand-500/30 flex items-center justify-center mx-auto">
@@ -141,7 +239,7 @@ export const DashboardPage = () => {
           <div className="max-w-md mx-auto space-y-1">
             <h3 className="text-lg font-bold text-white">Diagnostic Assessment Pending</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Complete your 12-question technical diagnostic test to compute your real Placement Readiness Score and unlock your personalized roadmap.
+              Complete your technical diagnostic test to initialize your real Placement Readiness Score and unlock your personalized daily preparation plan.
             </p>
           </div>
           <div>
@@ -155,10 +253,186 @@ export const DashboardPage = () => {
         </Card>
       )}
 
-      {/* Main Score & Metrics Section (When assessment completed) */}
+      {/* Stat Row */}
+      {hasScore && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+            <span className="text-[11px] font-mono text-slate-400 uppercase">READINESS SCORE</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold font-mono text-white">
+                {profile.readinessScore}
+              </span>
+              <span className="text-xs text-slate-400 font-mono">/ 100</span>
+              <span className="text-[10px] font-mono text-brand-400 ml-auto">Assessment based</span>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+            <span className="text-[11px] font-mono text-slate-400 uppercase">TODAY'S PLAN PROGRESS</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold font-mono text-white">
+                {planData?.stats?.completedTasks || 0} / {planData?.stats?.totalTasks || 0}
+              </span>
+              <span className="text-xs text-slate-400 font-mono">Tasks</span>
+              <span className="text-[10px] font-mono text-sky-400 ml-auto">
+                {planData?.stats?.percentComplete || 0}%
+              </span>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+            <span className="text-[11px] font-mono text-slate-400 uppercase">ALL-TIME COMPLETED</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold font-mono text-white">
+                {profile.tasksCompletedCount || 0}
+              </span>
+              <span className="text-xs text-slate-400">Tasks</span>
+              <span className="text-[10px] font-mono text-emerald-400 ml-auto">Verified</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CORE ENGINE FEATURE: Today's Preparation Plan */}
+      {hasScore && planData && (
+        <Card className="border-brand-500/30 bg-slate-900/70 shadow-2xl backdrop-blur-md">
+          <CardHeader className="border-b border-slate-800/80 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-brand-500/10 border border-brand-500/30 text-brand-400 flex items-center justify-center">
+                    <Target className="h-4 w-4" />
+                  </div>
+                  <CardTitle className="text-lg text-white">Today's Preparation Plan</CardTitle>
+                </div>
+                <CardDescription className="mt-1">
+                  Generated by your deterministic preparation engine to answer: "What should I prepare next?"
+                </CardDescription>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="text-right hidden sm:block">
+                  <p className="text-xs font-mono text-slate-300">
+                    {planData.stats.completedTasks} of {planData.stats.totalTasks} completed
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-mono">
+                    {planData.stats.totalMinutes} of {(profile.dailyPrepTimeHours || 0) * 60} mins planned
+                  </p>
+                </div>
+                <div className="w-24 sm:w-32 bg-slate-800 h-2.5 rounded-full overflow-hidden border border-slate-700">
+                  <div
+                    className="bg-brand-500 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${planData.stats.percentComplete}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-4 pt-5">
+            {planData.tasks?.length === 0 && (
+              <p className="rounded-lg border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-400">
+                No new recommendations are available for today. Your completed practice is saved in history.
+              </p>
+            )}
+            {planData.tasks?.map((task, idx) => {
+              const isCompleted = task.status === 'completed';
+              const isCurrentAction = completingTaskId === task._id;
+
+              return (
+                <div
+                  key={task._id || idx}
+                  className={`p-4 sm:p-5 rounded-xl border transition-all ${
+                    isCompleted
+                      ? 'bg-slate-950/40 border-slate-800/60 opacity-80'
+                      : 'bg-slate-950/80 border-slate-800 hover:border-slate-700 shadow-sm'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    {/* Left: Task Details */}
+                    <div className="space-y-2.5 flex-1">
+                      {/* Badges */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${getCategoryStyles(
+                            task.category
+                          )}`}
+                        >
+                          {task.category}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">
+                          {task.difficulty}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-400">
+                          <Clock className="h-3 w-3" /> {task.estimatedTimeMinutes} mins
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${task.priority === 'High' ? 'bg-rose-500/10 text-rose-300 border-rose-500/20' : task.priority === 'Medium' ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                          {task.priority} priority
+                        </span>
+                      </div>
+
+                      {/* Title */}
+                      <h3
+                        className={`text-sm sm:text-base font-semibold ${
+                          isCompleted ? 'text-slate-400 line-through' : 'text-white'
+                        }`}
+                      >
+                        {task.title}
+                      </h3>
+
+                      {/* Explainable Reason Callout */}
+                      <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs leading-relaxed flex items-start gap-2">
+                        <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-400" />
+                        <div>
+                          <strong className="text-amber-200">Why this task: </strong>
+                          {task.reason}
+                        </div>
+                      </div>
+
+                      {/* Action Tip */}
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        <span className="text-slate-300 font-medium">Actionable Goal: </span>
+                        {task.actionTip}
+                      </p>
+                    </div>
+
+                    {/* Right: Checkbox / Action Button */}
+                    <div className="shrink-0 self-end sm:self-center">
+                      {isCompleted ? (
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                          <CheckCircle2 className="h-4 w-4" />
+                          <span>Completed</span>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleCompleteTask(task._id)}
+                          isLoading={isCurrentAction}
+                          className="gap-2 text-xs font-semibold"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          <span>Mark as Completed</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+
+          <CardFooter className="justify-between text-xs text-slate-500 pt-3 border-t border-slate-800/80 font-mono">
+            <span>DETERMINISTIC ENGINE: Skill Gap Weighting</span>
+            <span className="text-brand-400 font-semibold">Assessment based readiness</span>
+          </CardFooter>
+        </Card>
+      )}
+
+      {/* Placement Readiness Score & Skill Breakdown */}
       {hasScore && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Readiness Score Card */}
+          {/* Readiness Score Meter */}
           <Card className="lg:col-span-1 border-slate-800 bg-slate-900/60 shadow-xl flex flex-col justify-between">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center justify-between text-base">
@@ -171,12 +445,11 @@ export const DashboardPage = () => {
                 </span>
               </CardTitle>
               <CardDescription>
-                Calculated from diagnostic accuracy, self-baseline, and project depth
+                Dynamically calculated from assessment baseline and completed practice tasks
               </CardDescription>
             </CardHeader>
 
             <CardContent className="py-6 flex flex-col items-center justify-center">
-              {/* Circular Score Visualizer */}
               <div className="relative flex items-center justify-center">
                 <svg className="w-44 h-44 transform -rotate-90" viewBox="0 0 120 120">
                   <circle
@@ -217,11 +490,11 @@ export const DashboardPage = () => {
 
             <CardFooter className="pt-3 border-t border-slate-800/80 justify-between text-[11px] text-slate-500 font-mono">
               <span>ALGORITHM: Grounded Weighted</span>
-              <span>STATE: Active</span>
+              <span className="text-brand-400">Assessment based</span>
             </CardFooter>
           </Card>
 
-          {/* Skill Breakdown */}
+          {/* Comprehensive Skill Breakdown */}
           <Card className="lg:col-span-2 border-slate-800 bg-slate-900/60 shadow-xl">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -229,7 +502,7 @@ export const DashboardPage = () => {
                 Comprehensive Skill Breakdown
               </CardTitle>
               <CardDescription>
-                Objective category scores based on your answers and technical baseline
+                Scores reflect your latest diagnostic assessment
               </CardDescription>
             </CardHeader>
 
@@ -296,10 +569,10 @@ export const DashboardPage = () => {
           <Card className="border-slate-800 bg-slate-900/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-emerald-400">
-                <CheckCircle className="h-4 w-4" /> Strong Competencies
+                <CheckCircle2 className="h-4 w-4" /> Strong Competencies
               </CardTitle>
               <CardDescription>
-                Topics where you demonstrated high placement accuracy
+                Topics where you demonstrated high placement proficiency
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -309,12 +582,12 @@ export const DashboardPage = () => {
                     key={idx}
                     className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-medium flex items-center gap-2"
                   >
-                    <CheckCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                     <span>{area}</span>
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-slate-400">Complete additional practice to build strong areas.</p>
+                <p className="text-xs text-slate-400">Complete daily tasks to graduate subjects into strong competencies.</p>
               )}
             </CardContent>
           </Card>
@@ -326,7 +599,7 @@ export const DashboardPage = () => {
                 <AlertTriangle className="h-4 w-4" /> Identified Improvement Areas
               </CardTitle>
               <CardDescription>
-                High-yield subjects requiring immediate review before interviews
+                Current technical bottlenecks targeted by today's preparation plan
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -342,7 +615,7 @@ export const DashboardPage = () => {
                 ))
               ) : (
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 text-xs">
-                  No critical deficiencies identified. Maintain consistency across your target roles!
+                  No critical deficiencies remaining! Maintain consistency on daily tasks.
                 </div>
               )}
             </CardContent>
@@ -350,54 +623,51 @@ export const DashboardPage = () => {
         </div>
       )}
 
-      {/* Recommended Next Actions (Deterministic) */}
-      {hasScore && profile.recommendations?.length > 0 && (
-        <Card className="border-slate-800 bg-slate-900/60 shadow-xl">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2 text-white">
-              <Target className="h-5 w-5 text-brand-500" />
-              Recommended Next Actions
-            </CardTitle>
+      {/* Completed Tasks History Section */}
+      {hasScore && historyTasks.length > 0 && (
+        <Card className="border-slate-800 bg-slate-900/40">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-200">
+                <History className="h-4 w-4 text-brand-500" />
+                Completed Tasks History
+              </CardTitle>
+              <span className="text-xs font-mono text-slate-400">
+                {historyTasks.length} Completed Total
+              </span>
+            </div>
             <CardDescription>
-              Actionable tasks prioritized to increase your Placement Readiness Score
+              Persisted record of completed placement practice modules
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-3">
-            {profile.recommendations.map((rec, idx) => (
+          <CardContent className="space-y-2.5">
+            {historyTasks.slice(0, 5).map((task) => (
               <div
-                key={idx}
-                className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-slate-700 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                key={task._id}
+                className="p-3 rounded-lg bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-3 text-xs"
               >
-                <div className="flex items-start gap-3">
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase shrink-0 mt-0.5 ${
-                      rec.priority === 'High'
-                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                        : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                    }`}
-                  >
-                    {rec.priority} Priority
-                  </span>
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                   <div>
-                    <h4 className="text-xs font-semibold text-white">{rec.category}</h4>
-                    <p className="text-xs text-slate-400 mt-0.5">{rec.action}</p>
+                    <span className="font-semibold text-slate-200">{task.title}</span>
+                    <span className="text-[11px] text-slate-500 ml-2">
+                      ({task.category} • {task.estimatedTimeMinutes} mins)
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                  <span className="text-[11px] font-mono text-brand-400 flex items-center gap-1">
-                    Ready to practice <ChevronRight className="h-3.5 w-3.5" />
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-brand-500/10 text-brand-400 border border-brand-500/20">
+                    {task.priority} priority
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
+                    {new Date(task.completedAt || task.updatedAt).toLocaleDateString()}
                   </span>
                 </div>
               </div>
             ))}
           </CardContent>
-
-          <CardFooter className="justify-between text-xs text-slate-500 pt-3 border-t border-slate-800/80">
-            <span>Deterministic Placement Roadmap v1</span>
-            <span className="text-brand-500 font-medium">Phase 2 Vertical Slice Complete</span>
-          </CardFooter>
         </Card>
       )}
     </div>

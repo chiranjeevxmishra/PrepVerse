@@ -95,6 +95,12 @@ const studentProfileSchema = new mongoose.Schema(
         },
       },
     ],
+
+    // Progress Engine Tracking
+    tasksCompletedCount: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
