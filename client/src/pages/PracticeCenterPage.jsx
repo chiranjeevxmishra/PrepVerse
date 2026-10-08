@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Clock3, Dumbbell, History, LoaderCircle } from 'lucide-react';
+import { CheckCircle2, Clock3, Dumbbell, History } from 'lucide-react';
 import { completePracticeSession, getPracticeSession, getPracticeSessions, startPracticeSession, submitPracticeAnswer } from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import Button from '../components/ui/Button';
+import PageHeader from '../components/ui/PageHeader';
 
 const CATEGORIES = ['DSA', 'DBMS', 'OS', 'Networking', 'OOP', 'JavaScript', 'Interview'];
 const DIFFICULTIES = ['Beginner', 'Intermediate', 'Advanced'];
@@ -22,16 +23,18 @@ export default function PracticeCenterPage() {
   const [answer, setAnswer] = useState('');
   const [evaluation, setEvaluation] = useState(null);
   const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true);
     try {
       const data = await getPracticeSessions();
       setHistory(data.sessions || []);
     } catch (err) {
       setError(err.message || 'Unable to load practice history.');
-    }
+    } finally { setHistoryLoading(false); }
   }, []);
 
   useEffect(() => { refreshHistory(); }, [refreshHistory]);
@@ -96,21 +99,14 @@ export default function PracticeCenterPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-mono uppercase tracking-widest text-brand-400">Interview & Practice Center</p>
-          <h1 className="mt-2 text-3xl font-bold text-white">Practice with a plan</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-400">Work through curated questions, get consistent concept coverage feedback, and keep a record of each session.</p>
-        </div>
-        {session && <Button variant="outline" onClick={reset}>Session setup</Button>}
-      </div>
+      <PageHeader eyebrow="Practice workspace" title="Practice with a plan" description="Choose a topic and session length, work through curated questions, and review the feedback saved for your answers." icon={Dumbbell} actions={session && <Button variant="outline" onClick={reset}>Session setup</Button>} />
 
       {error && <div role="alert" className="rounded-lg border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{error}</div>}
 
       {!session && <Card>
         <CardHeader><CardTitle>Choose your practice</CardTitle></CardHeader>
         <CardContent className="space-y-5">
-          <div><p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Category</p><div className="flex flex-wrap gap-2">{CATEGORIES.map((item) => <Button key={item} size="sm" variant={category === item ? 'primary' : 'secondary'} onClick={() => chooseCategory(item)}>{item}</Button>)}</div></div>
+          <div><p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Category</p><div className="flex flex-wrap gap-2">{CATEGORIES.map((item) => <Button key={item} size="sm" aria-pressed={category === item} variant={category === item ? 'primary' : 'secondary'} onClick={() => chooseCategory(item)}>{item}</Button>)}</div></div>
           <div className="grid gap-5 sm:grid-cols-2">
             <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Difficulty<select className="mt-2 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm normal-case text-slate-100" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>{DIFFICULTIES.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Session duration<select className="mt-2 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm normal-case text-slate-100" value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))}>{DURATIONS.map((item) => <option key={item} value={item}>{item} minutes</option>)}</select></label>
@@ -123,7 +119,7 @@ export default function PracticeCenterPage() {
         <CardHeader><div className="flex items-center justify-between"><CardTitle>{session.category} · {session.difficulty}</CardTitle><span className="inline-flex items-center gap-1 text-xs text-slate-400"><Clock3 className="h-3.5 w-3.5" />{session.durationMinutes} minutes</span></div></CardHeader>
         <CardContent>
           {currentQuestion ? <>
-            <p className="mb-2 text-xs font-mono text-brand-400">Question {currentQuestion.questionNumber} of {currentQuestion.totalQuestions}</p>
+            <div className="mb-4"><div className="mb-2 flex justify-between text-xs"><span className="font-medium text-violet-200">Question {currentQuestion.questionNumber} of {currentQuestion.totalQuestions}</span><span className="text-slate-500">{session.category} · {session.difficulty}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-violet-300" style={{width:`${Math.round((currentQuestion.questionNumber/Math.max(currentQuestion.totalQuestions,1))*100)}%`}}/></div></div>
             <h2 className="text-xl font-semibold text-white">{currentQuestion.question}</h2>
             {!evaluation && <><label className="mt-5 block text-sm text-slate-300" htmlFor="practice-answer">Your answer</label>
             <textarea id="practice-answer" maxLength={4000} rows={6} value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Explain your answer in your own words…" className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-brand-500 focus:outline-none" />
@@ -146,7 +142,7 @@ export default function PracticeCenterPage() {
 
       <Card>
         <CardHeader><CardTitle><span className="inline-flex items-center gap-2"><History className="h-4 w-4" />Practice history</span></CardTitle></CardHeader>
-        <CardContent>{history.length ? <div className="divide-y divide-slate-800">{history.map((item) => <div key={item.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium text-white">{item.category} · {item.difficulty} {item.overallScore != null && <span className="text-brand-400">· {item.overallScore}/100</span>}</p><p className="mt-1 text-xs text-slate-500">{dateLabel(item.completedAt || item.startedAt)} · {item.status.replace('_', ' ')}</p></div><Button size="sm" variant="outline" onClick={() => openSession(item.id)} disabled={loading}>{item.status === 'in_progress' ? 'Resume' : 'View summary'}</Button></div>)}</div> : <p className="text-sm text-slate-500">Your completed and in-progress sessions will appear here.</p>}</CardContent>
+        <CardContent>{historyLoading ? <div className="space-y-2"><div className="h-12 animate-pulse rounded-lg bg-slate-800/50"/><div className="h-12 animate-pulse rounded-lg bg-slate-800/50"/></div> : history.length ? <div className="divide-y divide-slate-800">{history.map((item) => <div key={item.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium text-white">{item.category} · {item.difficulty} {item.overallScore != null && <span className="text-brand-400">· {item.overallScore}/100</span>}</p><p className="mt-1 text-xs text-slate-500">{dateLabel(item.completedAt || item.startedAt)} · {item.status.replace('_', ' ')}</p></div><Button size="sm" variant="outline" onClick={() => openSession(item.id)} disabled={loading}>{item.status === 'in_progress' ? 'Resume' : 'View summary'}</Button></div>)}</div> : <p className="text-sm text-slate-500">Your completed and in-progress sessions will appear here.</p>}</CardContent>
       </Card>
     </div>
   );

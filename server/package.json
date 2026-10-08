@@ -10,7 +10,8 @@
     "test:phase3": "node test-phase3.js",
     "test:phase4": "node test-phase4.js",
     "test:phase5": "node test-phase5.js",
-    "test:phase6": "node test-phase6.js"
+    "test:phase6": "node test-phase6.js",
+    "test:peer": "node test-peer-matching.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

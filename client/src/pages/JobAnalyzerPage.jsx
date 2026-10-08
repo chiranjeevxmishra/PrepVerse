@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import Button from '../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import Input from '../components/ui/Input';
+import PageHeader from '../components/ui/PageHeader';
 import {
   addJobRecommendationToPlan,
   analyzeJobDescription,
@@ -136,18 +137,9 @@ export const JobAnalyzerPage = () => {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <header className="space-y-2 border-b border-slate-800 pb-5">
-        <div className="flex items-center gap-2 text-brand-400">
-          <Briefcase className="h-4 w-4" />
-          <span className="text-[11px] font-mono uppercase tracking-wider">Job-specific preparation</span>
-        </div>
-        <h1 className="text-2xl font-bold text-white sm:text-3xl">Job Description Analyzer</h1>
-        <p className="max-w-3xl text-sm text-slate-400">
-          See which requirements match your current assessment, which need work, and what to add to today’s preparation plan.
-        </p>
-      </header>
+      <PageHeader eyebrow="Career intelligence" title="Job Analyzer" description="Compare a target role with your assessed skills, find the gaps that matter, and turn recommendations into preparation." icon={Briefcase} />
 
-      {error && <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300">{error}</div>}
+      {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-400/20 bg-rose-400/[.06] p-3 text-sm text-rose-200"><span>{error}</span><Button size="sm" variant="outline" onClick={loadHistory}>Retry saved analyses</Button></div>}
       {notice && <div role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">{notice}</div>}
 
       <Card>
@@ -207,7 +199,7 @@ export const JobAnalyzerPage = () => {
                   ['Needs attention', analysis.summary.needsAttention, 'text-amber-300'],
                   ['Unknown', analysis.summary.unknown, 'text-slate-300'],
                 ].map(([label, count, color]) => (
-                  <div key={label} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                  <div key={label} className={`rounded-lg border p-3 ${label === 'Needs attention' && count > 0 ? 'border-amber-300/20 bg-amber-300/[.04]' : 'border-slate-800 bg-slate-950/60'}`}>
                     <p className="text-[11px] text-slate-400">{label}</p>
                     <p className={`mt-1 text-xl font-semibold ${color}`}>{count}</p>
                   </div>

@@ -1,682 +1,157 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import Button from '../components/ui/Button';
-import { getMyProfile, getTodaysPlan, completeTask, getPlanHistory } from '../services/api';
+import { Activity, ArrowRight, BookOpenCheck, BriefcaseBusiness, CalendarDays, Check, CheckCircle2, Circle, ClipboardCheck, Clock3, Dumbbell, RefreshCw, Sparkles, Target, TrendingUp } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import {
-  Award,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle2,
-  Circle,
-  ArrowRight,
-  RefreshCw,
-  Target,
-  Sparkles,
-  BookOpen,
-  Calendar,
-  Layers,
-  Clock,
-  Check,
-  ChevronRight,
-  HelpCircle,
-  History,
-  Zap,
-} from 'lucide-react';
+import { completeTask, getMyProfile, getPlanHistory, getPracticeSessions, getTodaysPlan } from '../services/api';
+import Button from '../components/ui/Button';
+import { Card, CardContent } from '../components/ui/Card';
+import ProgressRing from '../components/ui/ProgressRing';
 
-export const DashboardPage = () => {
-  const [profile, setProfile] = useState(null);
-  const [planData, setPlanData] = useState(null);
-  const [historyTasks, setHistoryTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [completingTaskId, setCompletingTaskId] = useState(null);
-  const [recentNotification, setRecentNotification] = useState(null);
-  const [error, setError] = useState(null);
+const prettySkill = (key) => ({ dsa: 'Data structures & algorithms', dbms: 'Databases', oop: 'Object-oriented programming', os: 'Operating systems', networking: 'Networking', fundamentals: 'Fundamentals' }[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase()));
+const priorityClass = (priority) => priority === 'High' ? 'text-amber-200 bg-amber-300/[.08] border-amber-300/15' : priority === 'Medium' ? 'text-violet-200 bg-violet-300/[.08] border-violet-300/15' : 'text-slate-400 bg-slate-800/70 border-slate-700';
 
+function DashboardSkeleton() {
+  return <div className="mx-auto max-w-6xl space-y-6" aria-label="Loading dashboard">
+    <div className="h-20 animate-pulse rounded-2xl bg-slate-900/70" />
+    <div className="grid gap-4 lg:grid-cols-[1.25fr_.75fr]"><div className="h-64 animate-pulse rounded-2xl bg-slate-900/70"/><div className="h-64 animate-pulse rounded-2xl bg-slate-900/70"/></div>
+    <div className="grid gap-4 sm:grid-cols-3">{[0,1,2].map((item)=><div key={item} className="h-28 animate-pulse rounded-xl bg-slate-900/70" />)}</div>
+  </div>;
+}
+
+export default function DashboardPage() {
   const { user } = useAuth();
+  const [profile, setProfile] = useState(null);
+  const [plan, setPlan] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [busyId, setBusyId] = useState('');
 
-  const loadDashboardData = async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (showSkeleton = true) => {
+    if (showSkeleton) setLoading(true);
+    setError('');
     try {
-      const [profileRes, planRes, historyRes] = await Promise.all([
-        getMyProfile(),
-        getTodaysPlan().catch((err) => {
-          setError(err.message || 'Could not load today’s preparation plan.');
-          return null;
-        }),
-        getPlanHistory().catch(() => null),
+      const [profileResult, planResult, historyResult, practiceResult] = await Promise.allSettled([
+        getMyProfile(), getTodaysPlan(), getPlanHistory(), getPracticeSessions(),
       ]);
-
-      if (profileRes.success) {
-        setProfile(profileRes.profile);
-      }
-      if (planRes && planRes.success) {
-        setPlanData(planRes);
-      }
-      if (historyRes && historyRes.success) {
-        setHistoryTasks(historyRes.tasks || []);
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to load placement dashboard data');
+      if (profileResult.status === 'rejected') throw profileResult.reason;
+      setProfile(profileResult.value.profile || null);
+      if (planResult.status === 'fulfilled') setPlan(planResult.value);
+      else { setPlan(null); setError(planResult.reason?.message || 'Your preparation plan could not be loaded.'); }
+      if (historyResult.status === 'fulfilled') setHistory(historyResult.value.tasks || []);
+      else setHistory([]);
+      if (practiceResult.status === 'fulfilled') setSessions(practiceResult.value.sessions || []);
+      else setSessions([]);
+    } catch (loadError) {
+      setError(loadError?.message || 'Your dashboard could not be loaded. Please try again.');
     } finally {
-      setLoading(false);
+      if (showSkeleton) setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadDashboardData();
   }, []);
 
-  const handleCompleteTask = async (taskId) => {
-    setCompletingTaskId(taskId);
-    setRecentNotification(null);
+  useEffect(() => { load(); }, [load]);
+
+  const hasAssessment = profile?.readinessScore != null;
+  const tasks = plan?.tasks || [];
+  const pendingTasks = tasks.filter((task) => task.status !== 'completed');
+  const completedSessions = sessions.filter((session) => session.status === 'completed');
+  const skillRows = useMemo(() => Object.entries(profile?.categoryScores || {})
+    .filter(([, score]) => Number.isFinite(score) && score > 0)
+    .sort((a, b) => a[1] - b[1]), [profile]);
+  const nextTask = pendingTasks[0];
+  const focusSkills = (profile?.weakAreas || []).slice(0, 3);
+  const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening';
+
+  const markComplete = async (task) => {
+    setBusyId(task._id); setError(''); setNotice('');
     try {
-      const data = await completeTask(taskId);
-      if (data.success) {
-        // Update local tasks state
-        setPlanData((prev) => {
-          if (!prev) return prev;
-          const updatedTasks = prev.tasks.map((t) =>
-            t._id === taskId ? { ...t, status: 'completed', completedAt: new Date() } : t
-          );
-          const completedCount = updatedTasks.filter((t) => t.status === 'completed').length;
-          return {
-            ...prev,
-            tasks: updatedTasks,
-            stats: {
-              ...prev.stats,
-              completedTasks: completedCount,
-              percentComplete: Math.round((completedCount / updatedTasks.length) * 100),
-            },
-          };
-        });
-
-        // Update persisted task count; completing practice does not change assessment scores.
-        if (data.profile) {
-          setProfile(data.profile);
-        }
-
-        setRecentNotification({
-          message: 'Task completed and saved to your practice history.',
-        });
-
-        // Refresh completed history
-        const updatedHistory = await getPlanHistory().catch(() => null);
-        if (updatedHistory?.success) {
-          setHistoryTasks(updatedHistory.tasks || []);
-        }
-      }
-    } catch (err) {
-      alert(err.message || 'Failed to complete task');
-    } finally {
-      setCompletingTaskId(null);
-    }
+      await completeTask(task._id);
+      setNotice('Task completed and saved to your preparation history.');
+      await load(false);
+    } catch (completeError) {
+      setError(completeError?.message || 'This task could not be completed. Try again.');
+    } finally { setBusyId(''); }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-3">
-        <div className="h-8 w-8 rounded-full border-2 border-brand-500 border-t-transparent animate-spin"></div>
-        <p className="text-xs text-slate-400 font-mono">Synthesizing personal preparation plan...</p>
+  if (loading) return <DashboardSkeleton />;
+
+  return <div className="mx-auto max-w-6xl space-y-6 pb-8">
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p className="pv-label mb-2 flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-violet-300" />{new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric'}).format(new Date())}</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">{greeting}, {user?.name?.split(' ')[0] || 'there'}.</h1>
+        <p className="mt-2 text-sm text-slate-400">Here’s what matters for your preparation today.</p>
       </div>
-    );
-  }
-
-  const hasScore = profile && profile.readinessScore !== null && profile.readinessScore !== undefined;
-
-  // Category Color Map
-  const getCategoryStyles = (cat) => {
-    const c = (cat || '').toUpperCase();
-    if (c === 'DSA') return 'bg-sky-500/10 text-sky-400 border-sky-500/30';
-    if (c === 'DBMS') return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-    if (c === 'OS') return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
-    if (c === 'NETWORKING') return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
-    if (c === 'OOP') return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30';
-    return 'bg-slate-800 text-slate-300 border-slate-700';
-  };
-
-  // Score Tier details
-  const getScoreTier = (score) => {
-    if (score >= 80) {
-      return {
-        label: 'Placement Ready',
-        color: 'text-brand-400',
-        bg: 'bg-brand-500/10 border-brand-500/30',
-        desc: 'High baseline. Focus on system design and top company tagged questions.',
-      };
-    }
-    if (score >= 60) {
-      return {
-        label: 'Developing Readiness',
-        color: 'text-amber-400',
-        bg: 'bg-amber-500/10 border-amber-500/30',
-        desc: 'Solid core knowledge. Targeted practice in identified gaps will push you into top placement tiers.',
-      };
-    }
-    return {
-      label: 'Foundation Phase',
-      color: 'text-sky-400',
-      bg: 'bg-sky-500/10 border-sky-500/30',
-      desc: 'Focus on core CS theory and consistent standard DSA problem-solving patterns.',
-    };
-  };
-
-  const tier = hasScore ? getScoreTier(profile.readinessScore) : null;
-
-  return (
-    <div className="space-y-8 animate-fadeIn max-w-7xl mx-auto">
-      {/* Top Welcome Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800/80">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/20 text-[11px] font-mono text-brand-400 mb-2">
-            <Sparkles className="h-3 w-3" />
-            <span>Placement Intelligence Operating System</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-            Welcome back, {user?.name || 'Student'}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Targeting{' '}
-            <span className="text-slate-200 font-medium">
-              {profile?.targetRole || 'Software Development Engineer'}
-            </span>{' '}
-            • Batch of {profile?.graduationYear || '2026'}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadDashboardData}
-            title="Refresh Data"
-            className="gap-1.5 text-xs"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            <span>Sync</span>
-          </Button>
-          <Link to="/assessment">
-            <Button variant="secondary" size="sm" className="gap-1.5 text-xs">
-              <BookOpen className="h-3.5 w-3.5" />
-              <span>{hasScore ? 'Retake Test' : 'Diagnostic Test'}</span>
-            </Button>
-          </Link>
-        </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={() => load()} className="gap-2"><RefreshCw className="h-3.5 w-3.5"/>Refresh</Button>
+        <Link to={hasAssessment?'/plan':'/assessment'}><Button size="sm" className="gap-2">{hasAssessment?'Open today’s plan':'Take your assessment'}<ArrowRight className="h-3.5 w-3.5"/></Button></Link>
       </div>
+    </header>
 
-      {error && (
-        <div className="p-3.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
-          {error}
-        </div>
-      )}
+    {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-400/20 bg-rose-400/[.06] px-4 py-3 text-sm text-rose-200"><span>{error}</span><Button size="sm" variant="outline" onClick={()=>load()}>Retry</Button></div>}
+    {notice && <div role="status" className="rounded-xl border border-emerald-300/20 bg-emerald-300/[.06] px-4 py-3 text-sm text-emerald-200">{notice}</div>}
 
-      {/* Completion Toast Notification */}
-      {recentNotification && (
-        <div className="p-4 rounded-xl bg-brand-500/15 border border-brand-500/40 text-brand-300 text-xs flex items-center justify-between animate-fadeIn shadow-lg">
-          <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded-full bg-brand-500 text-slate-950 flex items-center justify-center font-bold">
-              <Zap className="h-4 w-4" />
+    {!profile ? <Card><CardContent className="flex flex-col items-start gap-4 pt-0 sm:flex-row sm:items-center"><span className="rounded-xl border border-violet-300/20 bg-violet-300/[.07] p-3 text-violet-200"><Target className="h-5 w-5"/></span><div className="flex-1"><h2 className="text-base font-semibold text-white">Set up your preparation profile</h2><p className="mt-1 text-sm text-slate-400">Add your target role and preparation goals to get started.</p></div><Link to="/onboarding"><Button>Complete your profile<ArrowRight className="h-4 w-4"/></Button></Link></CardContent></Card> : <>
+      <section className="grid gap-4 lg:grid-cols-[1.22fr_.78fr]">
+        <Card className="relative overflow-hidden border-violet-300/15 bg-[linear-gradient(125deg,rgba(139,124,246,.08),rgba(17,19,28,.82)_55%)]">
+          <CardContent className="flex flex-col gap-6 pt-0 sm:flex-row sm:items-center">
+            <ProgressRing value={hasAssessment?profile.readinessScore:0} size={152} stroke={9} label={hasAssessment?`Readiness ${profile.readinessScore} out of 100`:'Readiness assessment not completed'}>
+              <div><p className="text-3xl font-semibold tracking-tight text-white">{hasAssessment?profile.readinessScore:'—'}</p><p className="text-[10px] uppercase tracking-[.14em] text-slate-500">Readiness</p></div>
+            </ProgressRing>
+            <div className="min-w-0 flex-1">
+              <p className="pv-label mb-2">Your current baseline</p>
+              <h2 className="text-xl font-semibold tracking-tight text-white">{hasAssessment?'Know your starting point.':'Your readiness journey starts here.'}</h2>
+              <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-400">{hasAssessment?`Based on your latest assessment for ${profile.targetRole}. Your preparation plan focuses on the gaps with the most impact.`:'Take the diagnostic to see your assessed strengths and the areas to focus on next.'}</p>
+              {hasAssessment ? <div className="mt-5 flex flex-wrap gap-2">{focusSkills.map((skill)=><span key={skill} className="rounded-full border border-amber-300/15 bg-amber-300/[.06] px-2.5 py-1 text-[11px] text-amber-100">Focus · {skill}</span>)}{!focusSkills.length&&(profile.strongAreas||[]).slice(0,2).map((skill)=><span key={skill} className="rounded-full border border-emerald-300/15 bg-emerald-300/[.06] px-2.5 py-1 text-[11px] text-emerald-100">Strong · {skill}</span>)}</div> : <Link to="/assessment" className="mt-5 inline-flex"><Button size="sm" className="gap-2">Take assessment<ArrowRight className="h-3.5 w-3.5"/></Button></Link>}
             </div>
-            <span className="font-medium text-slate-100">{recentNotification.message}</span>
-          </div>
-          <button
-            onClick={() => setRecentNotification(null)}
-            className="text-slate-400 hover:text-white text-xs px-2 py-1"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {/* If No Assessment Done Callout */}
-      {!hasScore && (
-        <Card className="border-brand-500/30 bg-brand-500/5 backdrop-blur-md p-6 text-center space-y-4">
-          <div className="h-12 w-12 rounded-full bg-brand-500/10 text-brand-500 border border-brand-500/30 flex items-center justify-center mx-auto">
-            <Target className="h-6 w-6" />
-          </div>
-          <div className="max-w-md mx-auto space-y-1">
-            <h3 className="text-lg font-bold text-white">Diagnostic Assessment Pending</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Complete your technical diagnostic test to initialize your real Placement Readiness Score and unlock your personalized daily preparation plan.
-            </p>
-          </div>
-          <div>
-            <Link to="/assessment">
-              <Button variant="primary" size="md" className="gap-2 font-bold shadow-md">
-                <span>Start Diagnostic Assessment</span>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-        </Card>
-      )}
-
-      {/* Stat Row */}
-      {hasScore && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-            <span className="text-[11px] font-mono text-slate-400 uppercase">READINESS SCORE</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-white">
-                {profile.readinessScore}
-              </span>
-              <span className="text-xs text-slate-400 font-mono">/ 100</span>
-              <span className="text-[10px] font-mono text-brand-400 ml-auto">Assessment based</span>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-            <span className="text-[11px] font-mono text-slate-400 uppercase">TODAY'S PLAN PROGRESS</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-white">
-                {planData?.stats?.completedTasks || 0} / {planData?.stats?.totalTasks || 0}
-              </span>
-              <span className="text-xs text-slate-400 font-mono">Tasks</span>
-              <span className="text-[10px] font-mono text-sky-400 ml-auto">
-                {planData?.stats?.percentComplete || 0}%
-              </span>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-            <span className="text-[11px] font-mono text-slate-400 uppercase">ALL-TIME COMPLETED</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-white">
-                {profile.tasksCompletedCount || 0}
-              </span>
-              <span className="text-xs text-slate-400">Tasks</span>
-              <span className="text-[10px] font-mono text-emerald-400 ml-auto">Verified</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CORE ENGINE FEATURE: Today's Preparation Plan */}
-      {hasScore && planData && (
-        <Card className="border-brand-500/30 bg-slate-900/70 shadow-2xl backdrop-blur-md">
-          <CardHeader className="border-b border-slate-800/80 pb-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-lg bg-brand-500/10 border border-brand-500/30 text-brand-400 flex items-center justify-center">
-                    <Target className="h-4 w-4" />
-                  </div>
-                  <CardTitle className="text-lg text-white">Today's Preparation Plan</CardTitle>
-                </div>
-                <CardDescription className="mt-1">
-                  Generated by your deterministic preparation engine to answer: "What should I prepare next?"
-                </CardDescription>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="text-right hidden sm:block">
-                  <p className="text-xs font-mono text-slate-300">
-                    {planData.stats.completedTasks} of {planData.stats.totalTasks} completed
-                  </p>
-                  <p className="text-[11px] text-slate-500 font-mono">
-                    {planData.stats.totalMinutes} of {(profile.dailyPrepTimeHours || 0) * 60} mins planned
-                  </p>
-                </div>
-                <div className="w-24 sm:w-32 bg-slate-800 h-2.5 rounded-full overflow-hidden border border-slate-700">
-                  <div
-                    className="bg-brand-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${planData.stats.percentComplete}%` }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent className="space-y-4 pt-5">
-            {planData.tasks?.length === 0 && (
-              <p className="rounded-lg border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-400">
-                No new recommendations are available for today. Your completed practice is saved in history.
-              </p>
-            )}
-            {planData.tasks?.map((task, idx) => {
-              const isCompleted = task.status === 'completed';
-              const isCurrentAction = completingTaskId === task._id;
-
-              return (
-                <div
-                  key={task._id || idx}
-                  className={`p-4 sm:p-5 rounded-xl border transition-all ${
-                    isCompleted
-                      ? 'bg-slate-950/40 border-slate-800/60 opacity-80'
-                      : 'bg-slate-950/80 border-slate-800 hover:border-slate-700 shadow-sm'
-                  }`}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                    {/* Left: Task Details */}
-                    <div className="space-y-2.5 flex-1">
-                      {/* Badges */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${getCategoryStyles(
-                            task.category
-                          )}`}
-                        >
-                          {task.category}
-                        </span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">
-                          {task.difficulty}
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-400">
-                          <Clock className="h-3 w-3" /> {task.estimatedTimeMinutes} mins
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${task.priority === 'High' ? 'bg-rose-500/10 text-rose-300 border-rose-500/20' : task.priority === 'Medium' ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
-                          {task.priority} priority
-                        </span>
-                      </div>
-
-                      {/* Title */}
-                      <h3
-                        className={`text-sm sm:text-base font-semibold ${
-                          isCompleted ? 'text-slate-400 line-through' : 'text-white'
-                        }`}
-                      >
-                        {task.title}
-                      </h3>
-
-                      {/* Explainable Reason Callout */}
-                      <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs leading-relaxed flex items-start gap-2">
-                        <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-400" />
-                        <div>
-                          <strong className="text-amber-200">Why this task: </strong>
-                          {task.reason}
-                        </div>
-                      </div>
-
-                      {/* Action Tip */}
-                      <p className="text-xs text-slate-400 leading-relaxed">
-                        <span className="text-slate-300 font-medium">Actionable Goal: </span>
-                        {task.actionTip}
-                      </p>
-                    </div>
-
-                    {/* Right: Checkbox / Action Button */}
-                    <div className="shrink-0 self-end sm:self-center">
-                      <div className="flex flex-col items-end gap-2">
-                        <Link to={`/practice?category=${encodeURIComponent(['DSA', 'DBMS', 'OS', 'Networking', 'OOP', 'Interview'].includes(task.category) ? task.category : 'Interview')}`}>
-                          <Button variant="secondary" size="sm" className="gap-2 text-xs">Practice now</Button>
-                        </Link>
-                        {isCompleted ? (
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
-                            <CheckCircle2 className="h-4 w-4" />
-                            <span>Completed</span>
-                          </div>
-                        ) : (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => handleCompleteTask(task._id)}
-                            isLoading={isCurrentAction}
-                            className="gap-2 text-xs font-semibold"
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                            <span>Mark as Completed</span>
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-
-          <CardFooter className="justify-between text-xs text-slate-500 pt-3 border-t border-slate-800/80 font-mono">
-            <span>DETERMINISTIC ENGINE: Skill Gap Weighting</span>
-            <span className="text-brand-400 font-semibold">Assessment based readiness</span>
-          </CardFooter>
-        </Card>
-      )}
-
-      {/* Placement Readiness Score & Skill Breakdown */}
-      {hasScore && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Readiness Score Meter */}
-          <Card className="lg:col-span-1 border-slate-800 bg-slate-900/60 shadow-xl flex flex-col justify-between">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center justify-between text-base">
-                <span className="flex items-center gap-2">
-                  <Award className="h-5 w-5 text-brand-500" />
-                  Readiness Score
-                </span>
-                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono border ${tier.bg} ${tier.color}`}>
-                  {tier.label}
-                </span>
-              </CardTitle>
-              <CardDescription>
-                Dynamically calculated from assessment baseline and completed practice tasks
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="py-6 flex flex-col items-center justify-center">
-              <div className="relative flex items-center justify-center">
-                <svg className="w-44 h-44 transform -rotate-90" viewBox="0 0 120 120">
-                  <circle
-                    cx="60"
-                    cy="60"
-                    r="52"
-                    stroke="#1e293b"
-                    strokeWidth="10"
-                    fill="transparent"
-                  />
-                  <circle
-                    cx="60"
-                    cy="60"
-                    r="52"
-                    stroke="#22c55e"
-                    strokeWidth="10"
-                    fill="transparent"
-                    strokeDasharray="326.72"
-                    strokeDashoffset={326.72 * (1 - profile.readinessScore / 100)}
-                    strokeLinecap="round"
-                    className="transition-all duration-1000 ease-out"
-                  />
-                </svg>
-                <div className="absolute flex flex-col items-center justify-center text-center">
-                  <span className="text-4xl font-extrabold tracking-tight text-white font-mono">
-                    {profile.readinessScore}
-                  </span>
-                  <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-                    out of 100
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-400 text-center mt-4 px-2 leading-relaxed">
-                {tier.desc}
-              </p>
-            </CardContent>
-
-            <CardFooter className="pt-3 border-t border-slate-800/80 justify-between text-[11px] text-slate-500 font-mono">
-              <span>ALGORITHM: Grounded Weighted</span>
-              <span className="text-brand-400">Assessment based</span>
-            </CardFooter>
-          </Card>
-
-          {/* Comprehensive Skill Breakdown */}
-          <Card className="lg:col-span-2 border-slate-800 bg-slate-900/60 shadow-xl">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-sky-400" />
-                Comprehensive Skill Breakdown
-              </CardTitle>
-              <CardDescription>
-                Scores reflect your latest diagnostic assessment
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-4 pt-1">
-              {[
-                { key: 'dsa', label: 'Data Structures & Algorithms', desc: 'LeetCode patterns, complexity' },
-                { key: 'oop', label: 'OOP & Software Fundamentals', desc: 'SOLID, polymorphism, design' },
-                { key: 'dbms', label: 'Database Systems (DBMS)', desc: 'ACID, indexing, SQL queries' },
-                { key: 'os', label: 'Operating Systems', desc: 'Processes, concurrency, virtual memory' },
-                { key: 'networking', label: 'Computer Networks', desc: 'TCP/IP, HTTP/REST, protocols' },
-              ].map(({ key, label, desc }) => {
-                const score = profile.categoryScores?.[key] || 0;
-                let colorClass = 'bg-brand-500';
-                let textColor = 'text-brand-400';
-                if (score < 55) {
-                  colorClass = 'bg-rose-500';
-                  textColor = 'text-rose-400';
-                } else if (score < 70) {
-                  colorClass = 'bg-amber-500';
-                  textColor = 'text-amber-400';
-                }
-
-                return (
-                  <div key={key} className="space-y-1.5 p-2.5 rounded-lg bg-slate-950/40 border border-slate-800/60">
-                    <div className="flex items-center justify-between text-xs">
-                      <div>
-                        <span className="font-semibold text-slate-200">{label}</span>
-                        <span className="text-[11px] text-slate-500 hidden sm:inline ml-2">
-                          ({desc})
-                        </span>
-                      </div>
-                      <span className={`font-mono font-bold ${textColor}`}>{score}%</span>
-                    </div>
-                    <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800/80">
-                      <div
-                        className={`${colorClass} h-full rounded-full transition-all duration-700`}
-                        style={{ width: `${score}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-
-            <CardFooter className="pt-3 border-t border-slate-800/80 justify-between text-[11px] text-slate-500">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-brand-500"></span> Strong (≥70%)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-amber-500"></span> Developing (55-69%)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-rose-500"></span> Needs Attention (&lt;55%)
-              </span>
-            </CardFooter>
-          </Card>
-        </div>
-      )}
-
-      {/* Strong & Weak Areas Summary */}
-      {hasScore && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Strong Areas */}
-          <Card className="border-slate-800 bg-slate-900/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-emerald-400">
-                <CheckCircle2 className="h-4 w-4" /> Strong Competencies
-              </CardTitle>
-              <CardDescription>
-                Topics where you demonstrated high placement proficiency
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {profile.strongAreas?.length > 0 ? (
-                profile.strongAreas.map((area, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-medium flex items-center gap-2"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                    <span>{area}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-slate-400">Complete daily tasks to graduate subjects into strong competencies.</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Weak Areas */}
-          <Card className="border-slate-800 bg-slate-900/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-amber-400">
-                <AlertTriangle className="h-4 w-4" /> Identified Improvement Areas
-              </CardTitle>
-              <CardDescription>
-                Current technical bottlenecks targeted by today's preparation plan
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {profile.weakAreas?.length > 0 ? (
-                profile.weakAreas.map((area, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium flex items-center gap-2"
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                    <span>{area}</span>
-                  </div>
-                ))
-              ) : (
-                <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 text-xs">
-                  No critical deficiencies remaining! Maintain consistency on daily tasks.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Completed Tasks History Section */}
-      {hasScore && historyTasks.length > 0 && (
-        <Card className="border-slate-800 bg-slate-900/40">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-200">
-                <History className="h-4 w-4 text-brand-500" />
-                Completed Tasks History
-              </CardTitle>
-              <span className="text-xs font-mono text-slate-400">
-                {historyTasks.length} Completed Total
-              </span>
-            </div>
-            <CardDescription>
-              Persisted record of completed placement practice modules
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-2.5">
-            {historyTasks.slice(0, 5).map((task) => (
-              <div
-                key={task._id}
-                className="p-3 rounded-lg bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-3 text-xs"
-              >
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                  <div>
-                    <span className="font-semibold text-slate-200">{task.title}</span>
-                    <span className="text-[11px] text-slate-500 ml-2">
-                      ({task.category} • {task.estimatedTimeMinutes} mins)
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-brand-500/10 text-brand-400 border border-brand-500/20">
-                    {task.priority} priority
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
-                    {new Date(task.completedAt || task.updatedAt).toLocaleDateString()}
-                  </span>
-                </div>
-              </div>
-            ))}
           </CardContent>
         </Card>
-      )}
-    </div>
-  );
-};
 
-export default DashboardPage;
+        <Card className="flex flex-col justify-between">
+          <CardContent className="pt-0">
+            <div className="flex items-center justify-between"><p className="pv-label">Your next best move</p><span className="rounded-lg border border-violet-300/15 bg-violet-300/[.06] p-2 text-violet-200"><Sparkles className="h-4 w-4"/></span></div>
+            {hasAssessment && nextTask ? <><p className="mt-5 text-lg font-semibold leading-snug text-white">{nextTask.title}</p><p className="mt-2 text-sm leading-relaxed text-slate-400">{nextTask.reason || nextTask.actionTip || `A ${nextTask.category} task selected for your preparation plan.`}</p><div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-slate-500"><span className="rounded-md border border-slate-700 px-2 py-1">{nextTask.category}</span><span className={`rounded-md border px-2 py-1 ${priorityClass(nextTask.priority)}`}>{nextTask.priority} priority</span><span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3"/>{nextTask.estimatedTimeMinutes} min</span></div></> : <><p className="mt-5 text-lg font-semibold leading-snug text-white">{hasAssessment?'You’re clear for today.':'Start with your baseline.'}</p><p className="mt-2 text-sm leading-relaxed text-slate-400">{hasAssessment?'No unfinished tasks remain in today’s plan. Review your progress or choose a practice session.':'Your assessment will shape the plan and surface a useful first step.'}</p></>}
+          </CardContent>
+          <div className="flex flex-wrap gap-2 border-t border-slate-800/80 px-5 pt-4">
+            {hasAssessment && nextTask ? <><Button size="sm" disabled={Boolean(busyId)} isLoading={busyId===nextTask._id} onClick={()=>markComplete(nextTask)} className="gap-2"><Check className="h-3.5 w-3.5"/>Mark complete</Button><Link to="/plan"><Button variant="outline" size="sm">View plan</Button></Link></> : <Link to={hasAssessment?'/practice':'/assessment'}><Button size="sm">{hasAssessment?'Start practicing':'Take assessment'}<ArrowRight className="h-3.5 w-3.5"/></Button></Link>}
+          </div>
+        </Card>
+      </section>
+
+      <section aria-label="Preparation summary" className="grid gap-3 sm:grid-cols-3">
+        {[
+          {label:'Plan tasks completed',value:profile.tasksCompletedCount??history.length,note:'Saved to your preparation history',icon:BookOpenCheck},
+          {label:'Practice sessions',value:completedSessions.length,note:'Completed sessions in your account',icon:Dumbbell},
+          {label:'Today’s focus',value:hasAssessment?`${tasks.filter((task)=>task.status==='completed').length} / ${tasks.length}`:'—',note:hasAssessment?'Tasks completed today':'Available after assessment',icon:Activity},
+        ].map(({label,value,note,icon:Icon})=><Card key={label} className="transition-colors hover:border-slate-700"><CardContent className="flex items-start justify-between pt-0"><div><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight text-white">{value}</p><p className="mt-1 text-[11px] text-slate-500">{note}</p></div><span className="rounded-lg border border-slate-700/80 bg-slate-800/60 p-2 text-slate-300"><Icon className="h-4 w-4"/></span></CardContent></Card>)}
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
+        <Card>
+          <CardContent className="pt-0">
+            <div className="mb-5 flex items-end justify-between gap-3"><div><p className="pv-label mb-1">Your plan</p><h2 className="text-lg font-semibold text-white">Today’s focus</h2></div><Link to="/plan" className="inline-flex items-center gap-1 text-xs text-violet-200 hover:text-white">Full plan<ArrowRight className="h-3 w-3"/></Link></div>
+            {!hasAssessment ? <div className="rounded-xl border border-dashed border-slate-700 p-5"><p className="text-sm text-slate-300">No assessment yet</p><p className="mt-1 text-xs leading-relaxed text-slate-500">Complete your baseline before we recommend daily tasks.</p></div> : tasks.length ? <div className="space-y-2">{tasks.slice(0,4).map((task)=><div key={task._id} className={`flex items-center gap-3 rounded-xl border p-3 ${task.status==='completed'?'border-slate-800/70 bg-slate-950/30':'border-slate-800 bg-slate-950/55'}`}>
+              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${task.status==='completed'?'border-emerald-300/15 bg-emerald-300/[.06] text-emerald-200':'border-violet-300/15 bg-violet-300/[.06] text-violet-200'}`}>{task.status==='completed'?<CheckCircle2 className="h-4 w-4"/>:<Circle className="h-4 w-4"/>}</span><div className="min-w-0 flex-1"><p className={`truncate text-sm font-medium ${task.status==='completed'?'text-slate-500 line-through':'text-slate-200'}`}>{task.title}</p><p className="mt-1 text-[11px] text-slate-500">{task.category} · {task.estimatedTimeMinutes} min</p></div><span className={`hidden rounded-md border px-2 py-1 text-[10px] sm:inline-flex ${priorityClass(task.priority)}`}>{task.priority}</span>
+            </div>)}</div> : <div className="rounded-xl border border-dashed border-slate-700 p-5"><p className="text-sm text-slate-300">No tasks for today</p><p className="mt-1 text-xs text-slate-500">Your plan will show new tasks when recommendations are available.</p></div>}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-0">
+            <div className="mb-5"><p className="pv-label mb-1">Skill overview</p><h2 className="text-lg font-semibold text-white">What you’ve assessed</h2></div>
+            {skillRows.length ? <div className="space-y-4">{skillRows.slice(0,6).map(([key,score])=><div key={key}><div className="mb-1.5 flex items-center justify-between gap-3"><span className="truncate text-xs text-slate-300">{prettySkill(key)}</span><span className="shrink-0 text-[11px] text-slate-500">{score}%</span></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-violet-300 transition-[width] duration-500" style={{width:`${Math.max(0,Math.min(score,100))}%`}}/></div></div>)}</div> : <div className="rounded-xl border border-dashed border-slate-700 p-5"><p className="text-sm text-slate-300">No assessed skills yet</p><p className="mt-1 text-xs text-slate-500">Your skill overview uses your latest diagnostic results.</p><Link to="/assessment" className="mt-3 inline-flex items-center gap-1 text-xs text-violet-200">Take assessment<ArrowRight className="h-3 w-3"/></Link></div>}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        {[
+          {title:'Continue your preparation',description:'Work through assessed gaps with a plan built around your available time.',path:'/plan',icon:BookOpenCheck},
+          {title:'Practice a skill',description:'Start a focused DSA, core CS, or interview practice session.',path:'/practice',icon:ClipboardCheck},
+          {title:'Compare a role',description:'See how a job description maps to your current assessment.',path:'/job-analyzer',icon:BriefcaseBusiness},
+        ].map(({title,description,path,icon:Icon})=><Link to={path} key={title} className="group rounded-xl border border-slate-800 bg-slate-900/35 p-4 transition duration-200 hover:-translate-y-0.5 hover:border-slate-700 hover:bg-slate-900/65"><span className="inline-flex rounded-lg border border-violet-300/15 bg-violet-300/[.06] p-2 text-violet-200"><Icon className="h-4 w-4"/></span><h3 className="mt-4 text-sm font-semibold text-slate-200">{title}</h3><p className="mt-1.5 text-xs leading-relaxed text-slate-500">{description}</p><span className="mt-4 inline-flex items-center gap-1 text-[11px] text-violet-200">Open<ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5"/></span></Link>)}
+      </section>
+    </>}
+  </div>;
+}

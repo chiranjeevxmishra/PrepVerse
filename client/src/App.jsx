@@ -7,11 +7,16 @@ import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
 import AssessmentPage from './pages/AssessmentPage';
 import DashboardPage from './pages/DashboardPage';
+import PreparationPlanPage from './pages/PreparationPlanPage';
 import JobAnalyzerPage from './pages/JobAnalyzerPage';
 import PracticeCenterPage from './pages/PracticeCenterPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { SocketProvider } from './context/SocketContext';
 import RoomsPage from './pages/RoomsPage';
+import PeerMatchingPage from './pages/PeerMatchingPage';
+import PeerInterviewsPage from './pages/PeerInterviewsPage';
+import ProgressPage from './pages/ProgressPage';
+import SettingsPage from './pages/SettingsPage';
 
 function App() {
   return (
@@ -73,7 +78,45 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="interviews"
+              element={
+                <ProtectedRoute>
+                  <PeerInterviewsPage />
+                </ProtectedRoute>
+              }
+            />            <Route
+              path="peers"
+              element={
+                <ProtectedRoute>
+                  <PeerMatchingPage />
+                </ProtectedRoute>
+              }
+            />
 
+            <Route
+              path="plan"
+              element={
+                <ProtectedRoute>
+                  <PreparationPlanPage />
+                </ProtectedRoute>
+              }
+            />            <Route
+              path="progress"
+              element={
+                <ProtectedRoute>
+                  <ProgressPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="settings"
+              element={
+                <ProtectedRoute>
+                  <SettingsPage />
+                </ProtectedRoute>
+              }
+            />
             {/* Fallback route */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

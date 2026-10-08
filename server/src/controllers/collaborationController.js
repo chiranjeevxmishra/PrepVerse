@@ -6,7 +6,7 @@ import RoomMessage from '../models/RoomMessage.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import { createUserNotification, notifyUpcomingInterviews, serializeNotification } from '../services/notificationService.js';
-import { emitToStudyRoom, getStudyRoomPresence } from '../realtime/socketServer.js';
+import { emitToStudyRoom, getStudyRoomPresence, removeUserFromStudyRoom } from '../realtime/socketServer.js';
 
 const responseInterview = (interview) => ({
   id: interview._id,
@@ -30,10 +30,12 @@ export const createRoom = async (req, res, next) => {
   try {
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     if (name.length < 2 || name.length > 80) return respondError(res, 400, 'Room name must be between 2 and 80 characters.');
+    const topic = typeof req.body?.topic === 'string' ? req.body.topic.trim() : '';
+    if (topic.length > 120) return respondError(res, 400, 'Room topic cannot exceed 120 characters.');
     let joinCode = crypto.randomBytes(5).toString('hex').toUpperCase();
     while (await StudyRoom.exists({ joinCode })) joinCode = crypto.randomBytes(5).toString('hex').toUpperCase();
-    const room = await StudyRoom.create({ name, owner: req.user._id, members: [req.user._id], joinCode });
-    return res.status(201).json({ success: true, room: { id: room._id, name: room.name, owner: req.user, memberCount: 1, joinCode } });
+    const room = await StudyRoom.create({ name, topic, owner: req.user._id, members: [req.user._id], joinCode });
+    return res.status(201).json({ success: true, room: { id: room._id, name: room.name, topic: room.topic, owner: req.user, memberCount: 1, joinCode } });
   } catch (error) { return next(error); }
 };
 
@@ -46,15 +48,22 @@ export const joinRoom = async (req, res, next) => {
     if (room.members.length >= 20 && !room.members.some((id) => id.equals(req.user._id))) return respondError(res, 409, 'This room has reached its 20-member limit.');
     const alreadyMember = room.members.some((id) => id.equals(req.user._id));
     if (!alreadyMember) {
+      const wasEmpty = room.members.length === 0;
       room.members.push(req.user._id);
+      if (wasEmpty) {
+        room.owner = req.user._id;
+        room.archivedAt = null;
+      }
       await room.save();
-      await createUserNotification({
-        recipient: room.owner,
-        actor: req.user._id,
-        type: 'room_joined',
-        message: `${req.user.name} joined your study room.`,
-        room: room._id,
-      });
+      if (!wasEmpty && room.owner && !room.owner.equals(req.user._id)) {
+        await createUserNotification({
+          recipient: room.owner,
+          actor: req.user._id,
+          type: 'room_joined',
+          message: `${req.user.name} joined your study room.`,
+          room: room._id,
+        });
+      }
       emitToStudyRoom(room._id, 'room:member_joined', { userId: req.user._id, name: req.user.name });
     }
     const populated = await findMemberRoom(room._id, req.user._id);
@@ -68,6 +77,7 @@ export const listRooms = async (req, res, next) => {
       .populate('owner', 'name avatar').populate('members', 'name avatar').sort({ updatedAt: -1 });
     return res.status(200).json({ success: true, rooms: rooms.map((room) => ({
       id: room._id, name: room.name, owner: room.owner, members: room.members, memberCount: room.members.length,
+      topic: room.topic,
       onlineUsers: getStudyRoomPresence(room._id),
     })) });
   } catch (error) { return next(error); }
@@ -81,6 +91,7 @@ export const getRoom = async (req, res, next) => {
     const interviews = await PeerInterview.find({ room: room._id }).sort({ startsAt: -1 }).limit(30);
     return res.status(200).json({ success: true, room: {
       id: room._id, name: room.name, owner: room.owner, members: room.members,
+      topic: room.topic,
       onlineUsers: getStudyRoomPresence(room._id), interviews: interviews.map(responseInterview),
     } });
   } catch (error) { return next(error); }
@@ -94,6 +105,40 @@ export const getRoomMessages = async (req, res, next) => {
     const messages = await RoomMessage.find({ room: req.params.id }).sort({ createdAt: -1 }).limit(100)
       .populate('author', 'name avatar').populate({ path: 'replyTo', populate: { path: 'author', select: 'name' } });
     return res.status(200).json({ success: true, messages: messages.reverse() });
+  } catch (error) { return next(error); }
+};
+
+export const leaveRoom = async (req, res, next) => {
+  try {
+    if (!isValidId(req.params.id)) return respondError(res, 400, 'Invalid room ID.');
+    const room = await StudyRoom.findOne({ _id: req.params.id, members: req.user._id });
+    if (!room) return respondError(res, 404, 'Study room not found.');
+
+    const interviews = await PeerInterview.find({
+      room: room._id,
+      status: { $ne: 'ended' },
+      $or: [{ host: req.user._id }, { participant: req.user._id }],
+    });
+    for (const interview of interviews) {
+      interview.status = 'ended';
+      interview.endedAt = new Date();
+      await interview.save();
+      emitToStudyRoom(room._id, 'interview:ended', responseInterview(interview));
+      const otherId = interview.host.equals(req.user._id) ? interview.participant : interview.host;
+      await createUserNotification({ recipient: otherId, actor: req.user._id, type: 'interview_ended', message: `${req.user.name} left the room and ended the interview.`, room: room._id, interview: interview._id });
+    }
+
+    emitToStudyRoom(room._id, 'room:member_left', { userId: req.user._id, name: req.user.name });
+    room.members = room.members.filter((memberId) => !memberId.equals(req.user._id));
+    const wasOwner = room.owner?.equals(req.user._id) || false;
+    if (wasOwner) room.owner = room.members[0] || null;
+    if (room.members.length === 0) room.archivedAt = new Date();
+    await room.save();
+    await removeUserFromStudyRoom(room._id, req.user._id);
+    if (room.owner) {
+      await createUserNotification({ recipient: room.owner, actor: req.user._id, type: 'room_left', message: `${req.user.name} left your study room.`, room: room._id });
+    }
+    return res.status(200).json({ success: true, left: true, archived: room.members.length === 0 });
   } catch (error) { return next(error); }
 };
 
@@ -155,6 +200,7 @@ export const joinInterview = async (req, res, next) => {
     if (!isValidId(req.params.id)) return respondError(res, 400, 'Invalid interview ID.');
     const interview = await findParticipantInterview(req.params.id, req.user._id);
     if (!interview) return respondError(res, 404, 'Interview not found.');
+    if (!(await StudyRoom.exists({ _id: interview.room, members: req.user._id }))) return respondError(res, 404, 'Interview not found.');
     if (interview.status === 'ended') return respondError(res, 409, 'This interview has ended.');
     const alreadyJoined = interview.joinedUsers.some((id) => id.equals(req.user._id));
     if (!alreadyJoined) interview.joinedUsers.push(req.user._id);
@@ -175,6 +221,7 @@ export const startInterview = async (req, res, next) => {
     if (!isValidId(req.params.id)) return respondError(res, 400, 'Invalid interview ID.');
     const interview = await PeerInterview.findOne({ _id: req.params.id, host: req.user._id });
     if (!interview) return respondError(res, 404, 'Interview not found.');
+    if (!(await StudyRoom.exists({ _id: interview.room, members: req.user._id }))) return respondError(res, 404, 'Interview not found.');
     if (interview.status === 'ended') return respondError(res, 409, 'This interview has ended.');
     const allJoined = [interview.host, interview.participant].every((id) => interview.joinedUsers.some((joined) => joined.equals(id)));
     if (!allJoined) return respondError(res, 409, 'Both interview participants must join before starting.');
@@ -196,6 +243,7 @@ export const endInterview = async (req, res, next) => {
     if (!isValidId(req.params.id)) return respondError(res, 400, 'Invalid interview ID.');
     const interview = await findParticipantInterview(req.params.id, req.user._id);
     if (!interview) return respondError(res, 404, 'Interview not found.');
+    if (!(await StudyRoom.exists({ _id: interview.room, members: req.user._id }))) return respondError(res, 404, 'Interview not found.');
     if (interview.status !== 'ended') {
       interview.status = 'ended';
       interview.endedAt = new Date();
@@ -231,4 +279,4 @@ export const markAllNotificationsRead = async (req, res, next) => {
   } catch (error) { return next(error); }
 };
 
-export default { createRoom, joinRoom, listRooms, getRoom, getRoomMessages, createRoomMessage, createInterview, joinInterview, startInterview, endInterview, listNotifications, markNotificationRead, markAllNotificationsRead };
+export default { createRoom, joinRoom, leaveRoom, listRooms, getRoom, getRoomMessages, createRoomMessage, createInterview, joinInterview, startInterview, endInterview, listNotifications, markNotificationRead, markAllNotificationsRead };

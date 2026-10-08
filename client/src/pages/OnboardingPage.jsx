@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { saveOnboarding } from '../services/api';
+import { getMyProfile, saveOnboarding } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
   Briefcase,
@@ -21,6 +21,9 @@ export const OnboardingPage = () => {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileLoadError, setProfileLoadError] = useState('');
+  const [profileExists, setProfileExists] = useState(false);
 
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -45,6 +48,25 @@ export const OnboardingPage = () => {
   // Practical
   const [projectsCount, setProjectsCount] = useState(2);
   const [dailyPrepTimeHours, setDailyPrepTimeHours] = useState(3);
+
+  useEffect(() => {
+    let active = true;
+    getMyProfile().then(({ profile }) => {
+      if (!active || !profile) return;
+      setProfileExists(true);
+      setTargetRole(profile.targetRole || 'Software Development Engineer (SDE)');
+      setGraduationYear(profile.graduationYear || 2026);
+      setTargetCompanies(profile.targetCompanies || []);
+      setLanguages(profile.languages || []);
+      setSelfAssessment((current) => ({ ...current, ...(profile.selfAssessment || {}) }));
+      setProjectsCount(profile.projectsCount ?? 0);
+      setDailyPrepTimeHours(profile.dailyPrepTimeHours || 2);
+    }).catch((loadError) => {
+      if (active) setProfileLoadError(loadError.message || 'Could not load your saved profile.');
+    }).finally(() => { if (active) setProfileLoading(false); });
+    return () => { active = false; };
+  }, []);
+
 
   const roles = [
     'Software Development Engineer (SDE)',
@@ -94,8 +116,8 @@ export const OnboardingPage = () => {
         dailyPrepTimeHours,
       });
 
-      // Navigate to the diagnostic skill assessment
-      navigate('/assessment');
+      // First-time setup continues to assessment; profile edits return to the workspace.
+      navigate(profileExists ? '/dashboard' : '/assessment');
     } catch (err) {
       setError(err.message || 'Failed to save onboarding details');
     } finally {
@@ -103,15 +125,18 @@ export const OnboardingPage = () => {
     }
   };
 
+  if (profileLoading) return <div className="mx-auto max-w-3xl space-y-4"><div className="h-8 w-52 animate-pulse rounded bg-slate-800"/><div className="h-52 animate-pulse rounded-xl border border-slate-800 bg-slate-900/60"/><div className="h-60 animate-pulse rounded-xl border border-slate-800 bg-slate-900/60"/></div>;
+
   return (
-    <div className="max-w-2xl mx-auto py-6 space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
+      <header className="border-b border-slate-800 pb-5"><p className="pv-label mb-2">Account profile</p><h1 className="text-2xl font-semibold text-white sm:text-3xl">{profileExists ? 'Profile & goals' : 'Set your preparation goals'}</h1><p className="mt-2 text-sm text-slate-400">{user?.name}{user?.email ? ` · ${user.email}` : ''} · Your saved target role and study preferences shape the plan.</p></header>
       {/* Progress Header */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-xs font-mono text-slate-400">
           <span className="flex items-center gap-1.5 text-brand-500 font-semibold">
-            <Sparkles className="h-3.5 w-3.5" /> Placement Onboarding
+            <Sparkles className="h-3.5 w-3.5" /> Profile & preparation goals
           </span>
-          <span>Step {step} of 3</span>
+          <span>{profileExists ? `Editing profile · Step ${step} of 3` : `Step ${step} of 3`}</span>
         </div>
         <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
           <div
@@ -121,6 +146,7 @@ export const OnboardingPage = () => {
         </div>
       </div>
 
+      {profileLoadError && <div role="alert" className="rounded-lg border border-rose-400/20 bg-rose-400/[.06] p-3 text-sm text-rose-200">{profileLoadError} <button type="button" className="underline" onClick={() => window.location.reload()}>Retry profile load</button></div>}
       {error && (
         <div className="p-3.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
           {error}
@@ -429,10 +455,11 @@ export const OnboardingPage = () => {
               variant="primary"
               size="md"
               onClick={handleSubmit}
+              disabled={Boolean(profileLoadError)}
               isLoading={isSubmitting}
               className="gap-2"
             >
-              <span>Complete & Start Assessment</span>
+              <span>{profileExists ? 'Save profile updates' : 'Complete & Start Assessment'}</span>
               <CheckCircle2 className="h-4 w-4" />
             </Button>
           </CardFooter>

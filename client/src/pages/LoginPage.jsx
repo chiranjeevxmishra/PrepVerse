@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import GoogleSignInButton from '../components/auth/GoogleSignInButton';
 import { Mail, Lock, User as UserIcon, AlertCircle, ArrowLeft } from 'lucide-react';
 
 export const LoginPage = () => {
@@ -18,7 +19,17 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = location.state?.from?.pathname || '/';
+  const finishAuthentication = useCallback((user) => {
+    if (location.state?.from?.pathname && location.state.from.pathname !== '/') {
+      navigate(location.state.from.pathname, { replace: true });
+    } else if (!user?.hasCompletedOnboarding) {
+      navigate('/onboarding', { replace: true });
+    } else if (!user?.hasCompletedAssessment) {
+      navigate('/assessment', { replace: true });
+    } else {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [location.state, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -50,42 +61,21 @@ export const LoginPage = () => {
     setIsSubmitting(false);
 
     if (result.success) {
-      if (location.state?.from?.pathname && location.state.from.pathname !== '/') {
-        navigate(location.state.from.pathname, { replace: true });
-      } else if (!result.user?.hasCompletedOnboarding) {
-        navigate('/onboarding', { replace: true });
-      } else if (!result.user?.hasCompletedAssessment) {
-        navigate('/assessment', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+      finishAuthentication(result.user);
     }
   };
 
-  const handleDemoGoogleLogin = async () => {
+  const handleGoogleCredential = useCallback(async (credential) => {
     setFormError('');
     clearError();
     setIsSubmitting(true);
-    const result = await googleLogin({
-      isDemo: true,
-      email: 'student.alex@prepverse.dev',
-      name: 'Alex Chen',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=AlexChen',
-    });
+    const result = await googleLogin({ credential });
     setIsSubmitting(false);
 
     if (result.success) {
-      if (location.state?.from?.pathname && location.state.from.pathname !== '/') {
-        navigate(location.state.from.pathname, { replace: true });
-      } else if (!result.user?.hasCompletedOnboarding) {
-        navigate('/onboarding', { replace: true });
-      } else if (!result.user?.hasCompletedAssessment) {
-        navigate('/assessment', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+      finishAuthentication(result.user);
     }
-  };
+  }, [clearError, finishAuthentication, googleLogin]);
 
   const switchMode = (signUpMode) => {
     setIsSignUp(signUpMode);
@@ -116,34 +106,13 @@ export const LoginPage = () => {
           </CardHeader>
 
           <CardContent className="space-y-5 pt-3">
-            {/* OAuth: Google Sign-in */}
+            {/* Google Identity Services renders its own secure sign-in button. */}
             <div className="space-y-3">
-              <button
-                type="button"
-                onClick={handleDemoGoogleLogin}
+              <GoogleSignInButton
+                onCredential={handleGoogleCredential}
+                onError={setFormError}
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700/80 text-sm font-medium text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24">
-                  <path
-                    fill="#EA4335"
-                    d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"
-                  />
-                  <path
-                    fill="#4285F4"
-                    d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.6 14.8c-.3-.8-.4-1.8-.4-2.8s.1-2 .4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2-6.4-4.8L1.9 16.4C3.7 20.4 7.5 23 12 23z"
-                  />
-                </svg>
-                <span>Continue with Google</span>
-              </button>
+              />
 
               <div className="relative flex items-center justify-center">
                 <div className="border-t border-slate-800 w-full"></div>

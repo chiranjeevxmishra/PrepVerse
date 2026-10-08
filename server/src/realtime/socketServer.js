@@ -126,6 +126,19 @@ export const emitToStudyRoom = (roomId, event, payload) => {
   io?.to(studyChannel(roomId.toString())).emit(event, payload);
 };
 
+export const removeUserFromStudyRoom = async (roomId, userId) => {
+  const roomKey = roomId.toString();
+  const userKey = userId.toString();
+  const socketIds = [...(onlineByRoom.get(roomKey)?.get(userKey)?.sockets || [])];
+  await Promise.all(socketIds.map(async (socketId) => {
+    const socket = io?.sockets.sockets.get(socketId);
+    if (!socket) return;
+    socket.data.studyRooms.delete(roomKey);
+    await socket.leave(studyChannel(roomKey));
+    removePresence(roomKey, userKey, socketId);
+  }));
+};
+
 export const getStudyRoomPresence = (roomId) => presencePayload(roomId.toString());
 
-export default { attachSocketServer, getSocketServer, emitToUser, emitToStudyRoom, getStudyRoomPresence };
+export default { attachSocketServer, getSocketServer, emitToUser, emitToStudyRoom, removeUserFromStudyRoom, getStudyRoomPresence };

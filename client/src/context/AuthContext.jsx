@@ -66,7 +66,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Google OAuth (Supports real credential or hackathon demo simulation)
+  // Exchange a Google Identity Services ID token for the PrepVerse session.
   const googleLogin = async (payload) => {
     setError(null);
     try {

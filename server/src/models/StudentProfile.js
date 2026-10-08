@@ -36,6 +36,14 @@ const studentProfileSchema = new mongoose.Schema(
       type: [String],
       default: ['JavaScript', 'C++'],
     },
+    learningInterests: {
+      type: [{ type: String, trim: true, maxlength: 40 }],
+      default: [],
+    },
+    peerSkills: {
+      type: [{ name: { type: String, required: true, trim: true, maxlength: 40 }, score: { type: Number, required: true, min: 0, max: 100 } }],
+      default: [],
+    },
 
     // Step 2: Self-Assessed Confidence (Scale 1 to 5)
     selfAssessment: {

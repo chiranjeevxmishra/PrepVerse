@@ -1,265 +1,72 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import Button from '../components/ui/Button';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { AlertCircle, ArrowLeft, ArrowRight, BarChart3, Check, CheckCircle2, CircleHelp, ClipboardCheck, RotateCcw, Target } from 'lucide-react';
 import { getAssessmentQuestions, submitAssessment } from '../services/api';
-import {
-  HelpCircle,
-  CheckCircle2,
-  ArrowRight,
-  ArrowLeft,
-  AlertCircle,
-  Sparkles,
-  BarChart2,
-  Clock,
-} from 'lucide-react';
+import Button from '../components/ui/Button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 
-export const AssessmentPage = () => {
+const pretty = (value) => value.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase());
+
+export default function AssessmentPage() {
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState({}); // { [questionId]: selectedOptionIndex }
+  const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState(null);
 
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const fetchQuestions = async () => {
-      try {
-        const data = await getAssessmentQuestions();
-        if (data.success && data.questions) {
-          setQuestions(data.questions);
-        }
-      } catch (err) {
-        setError(err.message || 'Unable to load diagnostic questions');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchQuestions();
-  }, []);
-
-  const handleSelectOption = (questionId, optionIndex) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [questionId]: optionIndex,
-    }));
-  };
-
-  const currentQ = questions[currentIndex];
-  const isAnswered = currentQ && answers[currentQ._id] !== undefined;
-  const answeredCount = Object.keys(answers).length;
-  const totalQuestions = questions.length;
-  const progressPercent = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
-
-  const handleSubmit = async () => {
-    if (answeredCount < totalQuestions) {
-      const confirmSubmit = window.confirm(
-        `You have answered ${answeredCount} of ${totalQuestions} questions. Are you sure you want to submit? Unanswered questions will count as incorrect.`
-      );
-      if (!confirmSubmit) return;
-    }
-
-    setSubmitting(true);
-    setError(null);
+  const loadQuestions = useCallback(async () => {
+    setLoading(true); setError('');
     try {
-      const payload = questions.map((q) => ({
-        questionId: q._id,
-        selectedOption: answers[q._id] !== undefined ? answers[q._id] : -1,
-      }));
+      const data = await getAssessmentQuestions();
+      setQuestions(data.questions || []);
+    } catch (err) { setError(err.message || 'Unable to load diagnostic questions.'); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { loadQuestions(); }, [loadQuestions]);
 
-      await submitAssessment(payload);
-      // Redirect to student dashboard
-      navigate('/dashboard');
-    } catch (err) {
-      setError(err.message || 'Failed to submit assessment');
-      setSubmitting(false);
-    }
+  const current = questions[currentIndex];
+  const answeredCount = Object.keys(answers).length;
+  const progress = questions.length ? Math.round(((currentIndex + 1) / questions.length) * 100) : 0;
+  const submit = async () => {
+    if (answeredCount < questions.length && !window.confirm(`You answered ${answeredCount} of ${questions.length}. Unanswered questions count as incorrect. Submit anyway?`)) return;
+    setSubmitting(true); setError('');
+    try {
+      const data = await submitAssessment(questions.map((question) => ({ questionId: question._id, selectedOption: answers[question._id] ?? -1 })));
+      setResult(data);
+    } catch (err) { setError(err.message || 'Assessment could not be submitted. Your answers are still here; try again.'); }
+    finally { setSubmitting(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-3">
-        <div className="h-8 w-8 rounded-full border-2 border-brand-500 border-t-transparent animate-spin"></div>
-        <p className="text-xs text-slate-400 font-mono">Loading diagnostic assessment...</p>
+  if (loading) return <div className="mx-auto max-w-4xl space-y-5"><div className="h-8 w-56 animate-pulse rounded bg-slate-800"/><div className="h-2 animate-pulse rounded bg-slate-800"/><div className="h-72 animate-pulse rounded-xl border border-slate-800 bg-slate-900/60"/></div>;
+  if (error && !questions.length) return <div className="mx-auto max-w-2xl py-8"><Card><CardContent className="pt-0 text-center"><AlertCircle className="mx-auto h-8 w-8 text-rose-300"/><h1 className="mt-4 text-lg font-semibold text-white">Assessment unavailable</h1><p className="mt-2 text-sm text-slate-400">{error}</p><Button variant="outline" onClick={loadQuestions} className="mt-5">Try again</Button></CardContent></Card></div>;
+  if (!questions.length) return <div className="mx-auto max-w-2xl py-8"><Card><CardContent className="pt-0 text-center"><CircleHelp className="mx-auto h-8 w-8 text-slate-500"/><h1 className="mt-4 text-lg font-semibold text-white">No assessment questions are available</h1><p className="mt-2 text-sm text-slate-400">Try again later or return to your dashboard.</p><Button variant="outline" onClick={loadQuestions} className="mt-5">Refresh questions</Button></CardContent></Card></div>;
+
+  if (result) {
+    const metrics = result.metrics || {};
+    const readiness = result.profile?.readinessScore ?? metrics.overallReadiness;
+    const skills = Object.entries(metrics.categoryScores || result.profile?.categoryScores || {});
+    const recommendations = metrics.recommendations || result.profile?.recommendations || [];
+    return <div className="mx-auto max-w-5xl space-y-6">
+      <header className="border-b border-slate-800 pb-5"><p className="pv-label mb-2 flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-300"/>Assessment complete</p><h1 className="text-2xl font-semibold text-white sm:text-3xl">Your baseline is ready</h1><p className="mt-2 text-sm text-slate-400">This summary comes from the answers you submitted. Use it to decide where to focus next.</p></header>
+      <div className="grid gap-4 sm:grid-cols-[.8fr_1.2fr]">
+        <Card className="border-violet-300/20 bg-violet-300/[.04]"><CardContent className="pt-0"><p className="text-xs text-slate-400">Placement readiness</p><div className="mt-2 flex items-baseline gap-2"><span className="text-5xl font-semibold tracking-tight text-white">{readiness ?? '—'}</span><span className="text-sm text-slate-500">/100</span></div><div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-violet-300" style={{ width: `${Math.max(0, Math.min(Number(readiness) || 0, 100))}%` }}/></div><p className="mt-4 text-xs text-slate-500">{result.attempt?.correctCount ?? '—'} of {result.attempt?.totalQuestions ?? questions.length} questions correct</p></CardContent></Card>
+        <Card><CardHeader><CardTitle className="flex items-center gap-2"><BarChart3 className="h-4 w-4 text-violet-300"/>Skill breakdown</CardTitle><CardDescription>Scores from this completed diagnostic</CardDescription></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2">{skills.map(([name, score])=><div key={name} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3"><div className="flex justify-between gap-3"><span className="text-xs text-slate-400">{pretty(name)}</span><span className="text-sm font-medium text-white">{score}%</span></div><div className="mt-2 h-1 overflow-hidden rounded bg-slate-800"><div className="h-full bg-violet-300" style={{width:`${Math.max(0,Math.min(Number(score)||0,100))}%`}}/></div></div>)}</CardContent></Card>
       </div>
-    );
+      <Card><CardHeader><CardTitle className="flex items-center gap-2"><Target className="h-4 w-4 text-violet-300"/>Recommended focus</CardTitle><CardDescription>Suggested from your assessed areas and profile</CardDescription></CardHeader><CardContent>{recommendations.length ? <div className="grid gap-3 sm:grid-cols-2">{recommendations.map((item,index)=><div key={`${item.category}-${index}`} className="rounded-lg border border-slate-800 bg-slate-950/40 p-4"><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-medium text-white">{item.category}</h3><span className={`rounded-full px-2 py-1 text-[10px] ${item.priority === 'High' ? 'bg-amber-400/10 text-amber-200' : 'bg-slate-800 text-slate-400'}`}>{item.priority} priority</span></div><p className="mt-2 text-xs leading-relaxed text-slate-400">{item.action}</p></div>)}</div>:<p className="text-sm text-slate-500">No recommendations were returned for this assessment.</p>}</CardContent></Card>
+      <div className="flex flex-wrap gap-3"><Link to="/plan"><Button className="gap-2">View preparation plan<ArrowRight className="h-4 w-4"/></Button></Link><Link to="/dashboard"><Button variant="outline">Go to dashboard</Button></Link><Button variant="ghost" onClick={()=>{setResult(null);setAnswers({});setCurrentIndex(0);}} className="gap-2"><RotateCcw className="h-3.5 w-3.5"/>Retake assessment</Button></div>
+    </div>;
   }
 
-  if (error && questions.length === 0) {
-    return (
-      <div className="max-w-lg mx-auto py-12 text-center space-y-4">
-        <AlertCircle className="h-10 w-10 text-rose-400 mx-auto" />
-        <h3 className="text-lg font-semibold text-white">Failed to Load Assessment</h3>
-        <p className="text-xs text-slate-400">{error}</p>
-        <Button variant="secondary" onClick={() => window.location.reload()}>
-          Retry
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-3xl mx-auto py-6 space-y-6">
-      {/* Assessment Header */}
-      <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <BarChart2 className="h-6 w-6 text-brand-500" />
-              Diagnostic Placement Assessment
-            </h1>
-            <p className="text-xs text-slate-400">
-              Assessing DSA, OOP, DBMS, OS, and Computer Networks to determine your Placement Readiness Score.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 text-slate-300">
-              {answeredCount} / {totalQuestions} Answered
-            </span>
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
-          <div
-            className="bg-brand-500 h-full transition-all duration-300 rounded-full"
-            style={{ width: `${progressPercent}%` }}
-          ></div>
-        </div>
-      </div>
-
-      {error && (
-        <div className="p-3.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
-          {error}
-        </div>
-      )}
-
-      {/* Question Card */}
-      {currentQ && (
-        <Card className="border-slate-800 bg-slate-900/60 shadow-xl">
-          <CardHeader className="border-b border-slate-800/80 pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-1 rounded bg-brand-500/10 border border-brand-500/30 text-[11px] font-mono font-semibold text-brand-400 uppercase">
-                  {currentQ.category}
-                </span>
-                <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-slate-400">
-                  {currentQ.difficulty}
-                </span>
-              </div>
-              <span className="text-xs font-mono text-slate-400">
-                Question {currentIndex + 1} of {totalQuestions}
-              </span>
-            </div>
-            <CardTitle className="text-base sm:text-lg text-slate-100 font-medium pt-3 leading-relaxed">
-              {currentQ.question}
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-3 pt-5">
-            {currentQ.options.map((option, idx) => {
-              const isSelected = answers[currentQ._id] === idx;
-              const optionLetters = ['A', 'B', 'C', 'D', 'E'];
-
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handleSelectOption(currentQ._id, idx)}
-                  className={`w-full p-4 rounded-xl text-left border transition-all flex items-start gap-3.5 ${
-                    isSelected
-                      ? 'border-brand-500 bg-brand-500/15 text-white ring-1 ring-brand-500'
-                      : 'border-slate-800 bg-slate-950/70 text-slate-300 hover:border-slate-700 hover:bg-slate-950'
-                  }`}
-                >
-                  <span
-                    className={`h-6 w-6 rounded-md text-xs font-mono font-bold flex items-center justify-center shrink-0 ${
-                      isSelected
-                        ? 'bg-brand-500 text-slate-950'
-                        : 'bg-slate-900 text-slate-400 border border-slate-800'
-                    }`}
-                  >
-                    {optionLetters[idx]}
-                  </span>
-                  <span className="text-xs sm:text-sm pt-0.5 leading-snug">{option}</span>
-                </button>
-              );
-            })}
-          </CardContent>
-
-          <CardFooter className="justify-between border-t border-slate-800/80 pt-4">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentIndex === 0}
-              onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-              className="gap-1.5"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span>Previous</span>
-            </Button>
-
-            <div className="flex items-center gap-2">
-              {currentIndex < totalQuestions - 1 ? (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setCurrentIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
-                  className="gap-1.5"
-                >
-                  <span>Next</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleSubmit}
-                  isLoading={submitting}
-                  className="gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold"
-                >
-                  <span>Submit Assessment</span>
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-          </CardFooter>
-        </Card>
-      )}
-
-      {/* Question Selector Quick Grid */}
-      <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800">
-        <p className="text-xs font-medium text-slate-400 mb-2">Question Navigator</p>
-        <div className="flex flex-wrap gap-1.5">
-          {questions.map((q, idx) => {
-            const answered = answers[q._id] !== undefined;
-            const isCurrent = currentIndex === idx;
-
-            return (
-              <button
-                key={q._id}
-                type="button"
-                onClick={() => setCurrentIndex(idx)}
-                className={`h-7 w-7 rounded-md text-[11px] font-mono font-medium transition-colors ${
-                  isCurrent
-                    ? 'ring-2 ring-brand-500 bg-brand-500 text-slate-950 font-bold'
-                    : answered
-                    ? 'bg-slate-800 text-brand-400 border border-brand-500/40'
-                    : 'bg-slate-950 text-slate-500 border border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                {idx + 1}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default AssessmentPage;
+  return <div className="mx-auto max-w-4xl space-y-6">
+    <header className="border-b border-slate-800 pb-5"><p className="pv-label mb-2 flex items-center gap-2"><ClipboardCheck className="h-3.5 w-3.5 text-violet-300"/>Skill assessment</p><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">Understand your baseline</h1><p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">Answer the technical questions to calculate a readiness snapshot and get a focused preparation plan.</p></div><span className="w-fit rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-400">{answeredCount} of {questions.length} answered</span></div></header>
+    {error && <div role="alert" className="flex items-start gap-2 rounded-lg border border-rose-400/20 bg-rose-400/[.06] p-3 text-sm text-rose-200"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0"/>{error}</div>}
+    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 sm:p-5"><div className="mb-3 flex items-center justify-between text-xs"><span className="font-medium text-slate-300">Question {currentIndex + 1} <span className="text-slate-600">/ {questions.length}</span></span><span className="text-slate-500">{answeredCount} answered</span></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-violet-300 transition-[width] duration-200" style={{width:`${progress}%`}}/></div></div>
+    {current && <Card className="border-slate-800 bg-slate-900/60"><CardHeader className="border-b border-slate-800/80"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="rounded-md border border-violet-300/20 bg-violet-300/[.07] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-200">{current.category}</span><span className="rounded-md border border-slate-800 px-2.5 py-1 text-[10px] text-slate-400">{current.difficulty}</span></div><span className="text-[11px] text-slate-500">Select one answer</span></div><CardTitle className="pt-3 text-base font-medium leading-relaxed sm:text-lg">{current.question}</CardTitle></CardHeader>
+      <CardContent className="space-y-2.5 pt-4">{current.options.map((option,index)=>{const selected=answers[current._id]===index;return <button key={`${current._id}-${index}`} type="button" aria-pressed={selected} onClick={()=>setAnswers((previous)=>({...previous,[current._id]:index}))} className={`flex w-full items-start gap-3 rounded-lg border p-3.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-300 sm:p-4 ${selected?'border-violet-300/50 bg-violet-300/[.08] text-white':'border-slate-800 bg-slate-950/35 text-slate-300 hover:border-slate-700 hover:bg-slate-950/70'}`}><span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold ${selected?'border-violet-200 bg-violet-200 text-slate-950':'border-slate-700 bg-slate-900 text-slate-500'}`}>{selected?<Check className="h-3.5 w-3.5"/>:String.fromCharCode(65+index)}</span><span className="pt-0.5 text-sm leading-relaxed">{option}</span></button>})}</CardContent>
+      <div className="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-4"><Button variant="outline" size="sm" disabled={currentIndex===0} onClick={()=>setCurrentIndex((index)=>index-1)} className="gap-1.5"><ArrowLeft className="h-3.5 w-3.5"/>Previous</Button>{currentIndex<questions.length-1?<Button size="sm" onClick={()=>setCurrentIndex((index)=>index+1)} className="gap-1.5">Next<ArrowRight className="h-3.5 w-3.5"/></Button>:<Button size="sm" isLoading={submitting} onClick={submit} className="gap-1.5">Submit assessment<CheckCircle2 className="h-3.5 w-3.5"/></Button>}</div>
+    </Card>}
+    <section className="rounded-xl border border-slate-800 bg-slate-900/35 p-4"><div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-medium text-slate-300">Question navigator</h2><span className="text-[10px] text-slate-600">Jump to a question</span></div><div className="flex flex-wrap gap-2">{questions.map((question,index)=>{const answered=answers[question._id]!==undefined;const active=index===currentIndex;return <button key={question._id} type="button" aria-label={`Question ${index+1}${answered?', answered':', unanswered'}`} aria-current={active?'step':undefined} onClick={()=>setCurrentIndex(index)} className={`h-9 min-w-9 rounded-lg border px-2 text-xs font-medium transition-colors ${active?'border-violet-300 bg-violet-300 text-slate-950':answered?'border-violet-300/25 bg-violet-300/[.08] text-violet-200':'border-slate-800 bg-slate-950/40 text-slate-500 hover:border-slate-700'}`}>{answered&&!active?<Check className="mx-auto h-3.5 w-3.5"/>:index+1}</button>})}</div></section>
+  </div>;
+}

@@ -105,64 +105,75 @@ export const login = async (req, res, next) => {
  */
 export const googleAuth = async (req, res, next) => {
   try {
-    const { credential, isDemo, email, name, avatar } = req.body;
-
-    let googleProfile = null;
-
-    // Case 1: Real Google ID Token provided
-    if (credential && credential !== 'demo-token') {
-      try {
-        const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`);
-        const data = await response.json();
-
-        if (data.error_description || !data.email) {
-          return res.status(400).json({
-            success: false,
-            message: 'Invalid Google OAuth credential token.',
-          });
-        }
-
-        googleProfile = {
-          email: data.email,
-          name: data.name || data.email.split('@')[0],
-          avatar: data.picture || null,
-          providerId: data.sub,
-        };
-      } catch (err) {
-        return res.status(500).json({
-          success: false,
-          message: 'Failed to verify Google token with Google servers.',
-        });
-      }
-    }
-    // Case 2: Hackathon prototype demo mode (allows seamless testing without Google Cloud Console setup)
-    else if (isDemo || credential === 'demo-token') {
-      googleProfile = {
-        email: email || 'student.demo@prepverse.dev',
-        name: name || 'Demo Student',
-        avatar: avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=PrepVerseStudent',
-        providerId: 'google-demo-student-id-001',
-      };
-    } else {
-      return res.status(400).json({
+    if (!ENV.GOOGLE_CLIENT_ID) {
+      return res.status(503).json({
         success: false,
-        message: 'Google credential or demo payload is required.',
+        message: 'Google sign-in is not configured. Set GOOGLE_CLIENT_ID on the server.',
       });
     }
 
-    // Check if user already exists
-    let user = await User.findOne({ email: googleProfile.email.toLowerCase() });
+    const credential = typeof req.body?.credential === 'string' ? req.body.credential : '';
+    if (!credential) {
+      return res.status(400).json({
+        success: false,
+        message: 'A Google ID token credential is required.',
+      });
+    }
+
+    let payload;
+    try {
+      const query = new URLSearchParams({ id_token: credential });
+      const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?${query.toString()}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) {
+        return res.status(401).json({ success: false, message: 'Invalid or expired Google credential.' });
+      }
+      payload = await response.json();
+    } catch {
+      return res.status(502).json({ success: false, message: 'Google credential verification is temporarily unavailable.' });
+    }
+
+    const issuerIsValid = ['accounts.google.com', 'https://accounts.google.com'].includes(payload.iss);
+    const tokenIsCurrent = Number(payload.exp) * 1000 > Date.now();
+    if (
+      payload.aud !== ENV.GOOGLE_CLIENT_ID ||
+      !issuerIsValid ||
+      !tokenIsCurrent ||
+      !payload.sub ||
+      !payload.email ||
+      payload.email_verified !== 'true'
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: 'Google credential is invalid, unverified, or was issued for another application.',
+      });
+    }
+
+    const googleProfile = {
+      email: payload.email.trim().toLowerCase(),
+      name: payload.name?.trim() || payload.email.split('@')[0],
+      avatar: payload.picture || null,
+      providerId: payload.sub,
+    };
+
+    // Match the stable Google subject first, then link an existing verified-email account.
+    let user = await User.findOne({ provider: 'google', providerId: googleProfile.providerId });
+    if (!user) user = await User.findOne({ email: googleProfile.email });
 
     if (user) {
-      // Update avatar or providerId if not already set
-      if (!user.providerId) {
-        user.providerId = googleProfile.providerId;
-        user.provider = 'google';
-        if (googleProfile.avatar) user.avatar = googleProfile.avatar;
-        await user.save();
+      if (user.providerId && user.providerId !== googleProfile.providerId) {
+        return res.status(409).json({
+          success: false,
+          message: 'This email is already linked to a different Google account.',
+        });
       }
+      user.providerId = googleProfile.providerId;
+      user.provider = 'google';
+      user.name = googleProfile.name;
+      if (googleProfile.avatar) user.avatar = googleProfile.avatar;
+      await user.save();
     } else {
-      // Create new user via Google OAuth
       user = await User.create({
         name: googleProfile.name,
         email: googleProfile.email.toLowerCase(),
@@ -175,6 +186,12 @@ export const googleAuth = async (req, res, next) => {
 
     return sendTokenResponse(user, 200, res, 'Google authentication successful.');
   } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'An account with this Google email already exists. Please try signing in again.',
+      });
+    }
     next(error);
   }
 };

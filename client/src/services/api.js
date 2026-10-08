@@ -166,8 +166,9 @@ export const completePracticeSession = async (sessionId) => {
 
 // Study rooms, peer interviews, and notifications
 export const getStudyRooms = async () => (await api.get('/collaboration/rooms')).data;
-export const createStudyRoom = async (name) => (await api.post('/collaboration/rooms', { name })).data;
+export const createStudyRoom = async (name, topic = '') => (await api.post('/collaboration/rooms', { name, topic })).data;
 export const joinStudyRoom = async (joinCode) => (await api.post('/collaboration/rooms/join', { joinCode })).data;
+export const leaveStudyRoom = async (roomId) => (await api.delete(`/collaboration/rooms/${roomId}/members/me`)).data;
 export const getStudyRoom = async (roomId) => (await api.get(`/collaboration/rooms/${roomId}`)).data;
 export const getRoomMessages = async (roomId) => (await api.get(`/collaboration/rooms/${roomId}/messages`)).data;
 export const sendRoomMessage = async (roomId, message) => (await api.post(`/collaboration/rooms/${roomId}/messages`, message)).data;
@@ -178,5 +179,8 @@ export const endPeerInterview = async (interviewId) => (await api.post(`/collabo
 export const getNotifications = async () => (await api.get('/collaboration/notifications')).data;
 export const markNotificationRead = async (notificationId) => (await api.patch(`/collaboration/notifications/${notificationId}/read`)).data;
 export const markAllNotificationsRead = async () => (await api.patch('/collaboration/notifications/read-all')).data;
+export const getPeerProfile = async () => (await api.get('/collaboration/peer-profile')).data;
+export const updatePeerProfile = async (profile) => (await api.patch('/collaboration/peer-profile', profile)).data;
+export const getPeerMatches = async () => (await api.get('/collaboration/matches')).data;
 
 export default api;
