@@ -5,6 +5,7 @@ import profileRoutes from './profileRoutes.js';
 import assessmentRoutes from './assessmentRoutes.js';
 import planRoutes from './planRoutes.js';
 import jobRoutes from './jobRoutes.js';
+import practiceRoutes from './practiceRoutes.js';
 
 const router = express.Router();
 
@@ -15,5 +16,6 @@ router.use('/profile', profileRoutes);
 router.use('/assessment', assessmentRoutes);
 router.use('/plan', planRoutes);
 router.use('/jobs', jobRoutes);
+router.use('/practice', practiceRoutes);
 
 export default router;

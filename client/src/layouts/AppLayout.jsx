@@ -14,6 +14,7 @@ export const AppLayout = () => {
       ? [
           { label: 'Dashboard', path: '/dashboard' },
           { label: 'Job Analyzer', path: '/job-analyzer' },
+          { label: 'Practice', path: '/practice' },
           { label: 'Assessment', path: '/assessment' },
           { label: 'Onboarding', path: '/onboarding' },
         ]

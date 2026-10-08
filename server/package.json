@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test:phase3": "node test-phase3.js",
-    "test:phase4": "node test-phase4.js"
+    "test:phase4": "node test-phase4.js",
+    "test:phase5": "node test-phase5.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

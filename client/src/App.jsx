@@ -8,6 +8,7 @@ import OnboardingPage from './pages/OnboardingPage';
 import AssessmentPage from './pages/AssessmentPage';
 import DashboardPage from './pages/DashboardPage';
 import JobAnalyzerPage from './pages/JobAnalyzerPage';
+import PracticeCenterPage from './pages/PracticeCenterPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 
 function App() {
@@ -50,6 +51,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <JobAnalyzerPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="practice"
+              element={
+                <ProtectedRoute>
+                  <PracticeCenterPage />
                 </ProtectedRoute>
               }
             />

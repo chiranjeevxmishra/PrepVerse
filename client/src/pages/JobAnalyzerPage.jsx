@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Briefcase, CheckCircle2, Clock3, FileSearch, Plus, Search, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import Button from '../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import Input from '../components/ui/Input';
@@ -25,6 +26,14 @@ const statusStyle = (status) => {
   if (status === 'developing') return 'bg-sky-500/10 border-sky-500/20 text-sky-300';
   if (status === 'needs_attention') return 'bg-amber-500/10 border-amber-500/20 text-amber-300';
   return 'bg-slate-800 border-slate-700 text-slate-300';
+};
+
+const practiceCategoryFor = (recommendation) => {
+  if (['DSA', 'DBMS', 'OS', 'Networking', 'OOP', 'Interview'].includes(recommendation.category)) {
+    return recommendation.category;
+  }
+  if (recommendation.skill === 'JavaScript') return 'JavaScript';
+  return null;
 };
 
 export const JobAnalyzerPage = () => {
@@ -256,10 +265,17 @@ export const JobAnalyzerPage = () => {
                     <p className="text-xs leading-relaxed text-slate-300">{recommendation.actionTip}</p>
                     <span className="inline-flex items-center gap-1 text-[11px] text-slate-500"><Clock3 className="h-3 w-3" />{recommendation.estimatedTimeMinutes} minutes</span>
                   </div>
-                  <Button variant="outline" size="sm" disabled={Boolean(recommendation.preparationTask)} isLoading={addingIndex === index} onClick={() => handleAddRecommendation(index)} className="shrink-0 gap-2">
-                    {recommendation.preparationTask ? <CheckCircle2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                    {recommendation.preparationTask ? 'In today’s plan' : 'Add to today’s plan'}
-                  </Button>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {practiceCategoryFor(recommendation) && (
+                      <Link to={`/practice?category=${encodeURIComponent(practiceCategoryFor(recommendation))}`}>
+                        <Button variant="secondary" size="sm" className="gap-2">Practice this skill</Button>
+                      </Link>
+                    )}
+                    <Button variant="outline" size="sm" disabled={Boolean(recommendation.preparationTask)} isLoading={addingIndex === index} onClick={() => handleAddRecommendation(index)} className="gap-2">
+                      {recommendation.preparationTask ? <CheckCircle2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                      {recommendation.preparationTask ? 'In today’s plan' : 'Add to today’s plan'}
+                    </Button>
+                  </div>
                 </div>
               )) : <p className="text-sm text-slate-400">Your assessed areas are strong for the skills detected. Keep practicing to maintain them.</p>}
             </CardContent>

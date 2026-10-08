@@ -398,23 +398,28 @@ export const DashboardPage = () => {
 
                     {/* Right: Checkbox / Action Button */}
                     <div className="shrink-0 self-end sm:self-center">
-                      {isCompleted ? (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
-                          <CheckCircle2 className="h-4 w-4" />
-                          <span>Completed</span>
-                        </div>
-                      ) : (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={() => handleCompleteTask(task._id)}
-                          isLoading={isCurrentAction}
-                          className="gap-2 text-xs font-semibold"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                          <span>Mark as Completed</span>
-                        </Button>
-                      )}
+                      <div className="flex flex-col items-end gap-2">
+                        <Link to={`/practice?category=${encodeURIComponent(['DSA', 'DBMS', 'OS', 'Networking', 'OOP', 'Interview'].includes(task.category) ? task.category : 'Interview')}`}>
+                          <Button variant="secondary" size="sm" className="gap-2 text-xs">Practice now</Button>
+                        </Link>
+                        {isCompleted ? (
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                            <CheckCircle2 className="h-4 w-4" />
+                            <span>Completed</span>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleCompleteTask(task._id)}
+                            isLoading={isCurrentAction}
+                            className="gap-2 text-xs font-semibold"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            <span>Mark as Completed</span>
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

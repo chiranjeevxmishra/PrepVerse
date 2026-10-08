@@ -138,4 +138,30 @@ export const addJobRecommendationToPlan = async (analysisId, recommendationIndex
   return response.data;
 };
 
+// Interview and Practice Services
+export const startPracticeSession = async (payload) => {
+  const response = await api.post('/practice/sessions', payload);
+  return response.data;
+};
+
+export const getPracticeSessions = async () => {
+  const response = await api.get('/practice/sessions');
+  return response.data;
+};
+
+export const getPracticeSession = async (sessionId) => {
+  const response = await api.get(`/practice/sessions/${sessionId}`);
+  return response.data;
+};
+
+export const submitPracticeAnswer = async (sessionId, answerData) => {
+  const response = await api.post(`/practice/sessions/${sessionId}/answers`, answerData);
+  return response.data;
+};
+
+export const completePracticeSession = async (sessionId) => {
+  const response = await api.post(`/practice/sessions/${sessionId}/complete`);
+  return response.data;
+};
+
 export default api;
