@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
 import AssessmentPage from './pages/AssessmentPage';
 import DashboardPage from './pages/DashboardPage';
+import JobAnalyzerPage from './pages/JobAnalyzerPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 
 function App() {
@@ -41,6 +42,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="job-analyzer"
+              element={
+                <ProtectedRoute>
+                  <JobAnalyzerPage />
                 </ProtectedRoute>
               }
             />

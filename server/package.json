@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test:phase3": "node test-phase3.js"
+    "test:phase3": "node test-phase3.js",
+    "test:phase4": "node test-phase4.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -112,4 +112,30 @@ export const getPlanHistory = async () => {
   return response.data;
 };
 
+// Job Description Analysis Services
+export const analyzeJobDescription = async (payload) => {
+  const response = await api.post('/jobs/analyze', payload);
+  return response.data;
+};
+
+export const getJobAnalyses = async () => {
+  const response = await api.get('/jobs');
+  return response.data;
+};
+
+export const getJobAnalysis = async (analysisId) => {
+  const response = await api.get(`/jobs/${analysisId}`);
+  return response.data;
+};
+
+export const deleteJobAnalysis = async (analysisId) => {
+  const response = await api.delete(`/jobs/${analysisId}`);
+  return response.data;
+};
+
+export const addJobRecommendationToPlan = async (analysisId, recommendationIndex) => {
+  const response = await api.post(`/jobs/${analysisId}/tasks/${recommendationIndex}`);
+  return response.data;
+};
+
 export default api;

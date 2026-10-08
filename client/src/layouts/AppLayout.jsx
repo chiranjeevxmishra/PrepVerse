@@ -13,6 +13,7 @@ export const AppLayout = () => {
     ...(isAuthenticated
       ? [
           { label: 'Dashboard', path: '/dashboard' },
+          { label: 'Job Analyzer', path: '/job-analyzer' },
           { label: 'Assessment', path: '/assessment' },
           { label: 'Onboarding', path: '/onboarding' },
         ]
