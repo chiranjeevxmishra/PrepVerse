@@ -1,12 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Terminal, Shield, Cpu, Activity, LogIn, LogOut, User as UserIcon } from 'lucide-react';
+import { Terminal, Shield, Cpu, Activity, LogIn, LogOut, Bell } from 'lucide-react';
 import Button from '../components/ui/Button';
+import { useSocket } from '../context/SocketContext';
+import { markAllNotificationsRead, markNotificationRead } from '../services/api';
 
 export const AppLayout = () => {
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
+  const { status: socketStatus, notifications, dismissNotification } = useSocket();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const navItems = [
     { label: 'Overview', path: '/' },
@@ -19,8 +23,20 @@ export const AppLayout = () => {
           { label: 'Onboarding', path: '/onboarding' },
         ]
       : []),
-    { label: 'Rooms (Phase 6)', path: '/rooms', disabled: true },
+    ...(isAuthenticated ? [{ label: 'Study Rooms', path: '/rooms' }] : []),
   ];
+  const unreadCount = notifications.filter((item) => !item.readAt).length;
+
+  const handleNotificationRead = async (notification) => {
+    if (notification.readAt) return;
+    dismissNotification(notification.id);
+    try { await markNotificationRead(notification.id); } catch { /* The next REST refresh will restore the server read state. */ }
+  };
+
+  const handleReadAll = async () => {
+    notifications.forEach((item) => dismissNotification(item.id));
+    try { await markAllNotificationsRead(); } catch { /* The next REST refresh will restore the server read state. */ }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
@@ -73,6 +89,17 @@ export const AppLayout = () => {
           <div className="flex items-center gap-3">
             {isAuthenticated && user ? (
               <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Button variant="ghost" size="sm" aria-label="Notifications" onClick={() => setNotificationsOpen((open) => !open)} className="relative px-2">
+                    <Bell className="h-4 w-4" />
+                    {unreadCount > 0 && <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+                  </Button>
+                  {notificationsOpen && <div className="absolute right-0 top-11 z-[60] w-80 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-2xl sm:w-96">
+                    <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold text-white">Notifications</p>{unreadCount > 0 && <button type="button" className="text-[11px] text-brand-400 hover:text-brand-300" onClick={handleReadAll}>Mark all read</button>}</div>
+                    <div className="max-h-80 space-y-1 overflow-y-auto">{notifications.length ? notifications.slice(0, 20).map((item) => <Link key={item.id} to={item.roomId ? `/rooms?room=${item.roomId}` : '/rooms'} onClick={() => { handleNotificationRead(item); setNotificationsOpen(false); }} className={`block rounded-lg p-2.5 text-xs hover:bg-slate-800 ${item.readAt ? 'text-slate-400' : 'bg-slate-800/60 text-slate-100'}`}><span>{item.message}</span><span className="mt-1 block text-[10px] text-slate-500">{new Date(item.createdAt).toLocaleString()}</span></Link>) : <p className="px-2 py-5 text-center text-xs text-slate-500">You’re all caught up.</p>}</div>
+                    <p className="mt-2 border-t border-slate-800 pt-2 text-[10px] text-slate-500">Realtime {socketStatus === 'connected' ? 'connected' : socketStatus === 'reconnecting' || socketStatus === 'connecting' ? 'reconnecting…' : socketStatus}</p>
+                  </div>}
+                </div>
                 <div className="flex items-center gap-2 pl-2 pr-3 py-1 rounded-full bg-slate-900 border border-slate-800">
                   {user.avatar ? (
                     <img

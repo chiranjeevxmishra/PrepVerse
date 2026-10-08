@@ -164,4 +164,19 @@ export const completePracticeSession = async (sessionId) => {
   return response.data;
 };
 
+// Study rooms, peer interviews, and notifications
+export const getStudyRooms = async () => (await api.get('/collaboration/rooms')).data;
+export const createStudyRoom = async (name) => (await api.post('/collaboration/rooms', { name })).data;
+export const joinStudyRoom = async (joinCode) => (await api.post('/collaboration/rooms/join', { joinCode })).data;
+export const getStudyRoom = async (roomId) => (await api.get(`/collaboration/rooms/${roomId}`)).data;
+export const getRoomMessages = async (roomId) => (await api.get(`/collaboration/rooms/${roomId}/messages`)).data;
+export const sendRoomMessage = async (roomId, message) => (await api.post(`/collaboration/rooms/${roomId}/messages`, message)).data;
+export const schedulePeerInterview = async (roomId, payload) => (await api.post(`/collaboration/rooms/${roomId}/interviews`, payload)).data;
+export const joinPeerInterview = async (interviewId) => (await api.post(`/collaboration/interviews/${interviewId}/join`)).data;
+export const startPeerInterview = async (interviewId) => (await api.post(`/collaboration/interviews/${interviewId}/start`)).data;
+export const endPeerInterview = async (interviewId) => (await api.post(`/collaboration/interviews/${interviewId}/end`)).data;
+export const getNotifications = async () => (await api.get('/collaboration/notifications')).data;
+export const markNotificationRead = async (notificationId) => (await api.patch(`/collaboration/notifications/${notificationId}/read`)).data;
+export const markAllNotificationsRead = async () => (await api.patch('/collaboration/notifications/read-all')).data;
+
 export default api;

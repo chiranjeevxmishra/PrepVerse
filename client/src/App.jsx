@@ -10,10 +10,13 @@ import DashboardPage from './pages/DashboardPage';
 import JobAnalyzerPage from './pages/JobAnalyzerPage';
 import PracticeCenterPage from './pages/PracticeCenterPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import { SocketProvider } from './context/SocketContext';
+import RoomsPage from './pages/RoomsPage';
 
 function App() {
   return (
     <AuthProvider>
+      <SocketProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<AppLayout />}>
@@ -62,12 +65,21 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="rooms"
+              element={
+                <ProtectedRoute>
+                  <RoomsPage />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Fallback route */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </BrowserRouter>
+      </SocketProvider>
     </AuthProvider>
   );
 }

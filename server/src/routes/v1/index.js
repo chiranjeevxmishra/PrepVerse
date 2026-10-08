@@ -6,6 +6,7 @@ import assessmentRoutes from './assessmentRoutes.js';
 import planRoutes from './planRoutes.js';
 import jobRoutes from './jobRoutes.js';
 import practiceRoutes from './practiceRoutes.js';
+import collaborationRoutes from './collaborationRoutes.js';
 
 const router = express.Router();
 
@@ -17,5 +18,6 @@ router.use('/assessment', assessmentRoutes);
 router.use('/plan', planRoutes);
 router.use('/jobs', jobRoutes);
 router.use('/practice', practiceRoutes);
+router.use('/collaboration', collaborationRoutes);
 
 export default router;
