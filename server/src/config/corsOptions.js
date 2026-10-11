@@ -1,9 +1,31 @@
+import cors from 'cors';
+
 export const createCorsOptions = (allowedOrigins) => ({
-  origin: (origin, callback) => {
-    // Requests without an Origin header are non-browser clients (health checks, CLI).
-    callback(null, !origin || allowedOrigins.includes(origin));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+origin: (origin, callback) => {
+// Allow requests without an Origin header (CLI/health checks)
+if (!origin || allowedOrigins.includes(origin)) {
+return callback(null, true);
+}
+
+
+return callback(new Error(`CORS blocked origin: ${origin}`));
+
+
+},
+
+credentials: true,
+
+methods: [
+'GET',
+'POST',
+'PUT',
+'PATCH',
+'DELETE',
+'OPTIONS',
+],
+
+allowedHeaders: [
+'Content-Type',
+'Authorization',
+],
 });
