@@ -26,10 +26,10 @@ const isRoomMember = async (roomId, userId) => Boolean(await StudyRoom.exists({ 
 
 export const attachSocketServer = (httpServer) => {
   io = new Server(httpServer, {
-    cors: { origin: ENV.CORS_ORIGIN, credentials: true },
+    cors: { origin: ENV.CORS_ORIGINS, credentials: true },
     allowRequest: (req, callback) => {
       const origin = req.headers.origin;
-      callback(null, !origin || origin === ENV.CORS_ORIGIN);
+      callback(null, !origin || ENV.CORS_ORIGINS.includes(origin));
     },
   });
 

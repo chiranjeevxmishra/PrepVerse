@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "test:startup": "node --test test/unit/startup.test.js test/unit/http-config.test.js",
     "test:phase3": "node test-phase3.js",
     "test:phase4": "node test-phase4.js",
     "test:phase5": "node test-phase5.js",

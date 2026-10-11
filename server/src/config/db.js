@@ -9,7 +9,9 @@ export const connectDB = async () => {
     console.log(`[Database] MongoDB Connected: ${conn.connection.host}`);
     return conn;
   } catch (error) {
-    console.warn(`[Database Warning] Could not connect to default URI (${ENV.MONGODB_URI}): ${error.message}`);
+    console.warn(
+      `[Database Warning] MongoDB connection failed (${error.name}${error.code ? ` ${error.code}` : ''}).`
+    );
 
     // In development, if local mongod is not present, fall back to MongoMemoryServer
     if (ENV.NODE_ENV === 'development') {
@@ -27,7 +29,7 @@ export const connectDB = async () => {
     }
 
     if (ENV.NODE_ENV === 'production') {
-      process.exit(1);
+      throw new Error('MongoDB connection failed. Verify MONGODB_URI and database network access.');
     }
     return null;
   }

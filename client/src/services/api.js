@@ -1,7 +1,11 @@
 import axios from 'axios';
 
+const defaultApiBaseURL = import.meta.env.PROD
+  ? 'https://prepverse-1.onrender.com/api/v1'
+  : '/api/v1';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: import.meta.env.VITE_API_BASE_URL || defaultApiBaseURL,
   headers: {
     'Content-Type': 'application/json',
   },

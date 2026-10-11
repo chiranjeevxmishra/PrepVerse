@@ -183,6 +183,7 @@ export const seedAssessmentQuestions = async () => {
       console.log('[Seed] Assessment questions seeded successfully.');
     }
   } catch (error) {
-    console.error(`[Seed Error] Failed to seed questions: ${error.message}`);
+    console.error(`[Seed Error] Required assessment question seeding failed (${error.name}).`);
+    throw new Error('Required assessment question seeding failed.');
   }
 };
